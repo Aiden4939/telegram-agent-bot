@@ -21,6 +21,8 @@ Telegram → telegram-agent-bot (grammy + Express)
 
 ## 快速開始（本機）
 
+> **換裝置 / 新對話接手：** 先讀 [docs/NEXT_SESSION.md](docs/NEXT_SESSION.md)
+
 ### 1. 環境變數
 
 ```bash
