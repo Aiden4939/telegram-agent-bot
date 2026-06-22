@@ -1,7 +1,5 @@
-import OpenAI from "openai";
+import { openai } from "./openaiClient.js";
 import { env } from "../config/env.js";
-
-const openai = new OpenAI({ apiKey: env.openaiApiKey });
 
 export async function chat(message: string): Promise<string> {
   const completion = await openai.chat.completions.create({

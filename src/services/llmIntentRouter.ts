@@ -1,9 +1,7 @@
-import OpenAI from "openai";
+import { openai } from "./openaiClient.js";
 import { env } from "../config/env.js";
 import type { Intent, IntentResult } from "../types/intent.js";
 import { classifyIntentByRules, extractUrl } from "./intentRouter.js";
-
-const openai = new OpenAI({ apiKey: env.openaiApiKey });
 
 const VALID_INTENTS: Intent[] = ["scrape", "dev", "chat"];
 
