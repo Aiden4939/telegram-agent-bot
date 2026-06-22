@@ -9,6 +9,7 @@
     "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
+    "@connectrpc/connect-node": "^1.7.0",
     "@cursor/sdk": "^1.0.19",
     "better-sqlite3": "^11.8.1",
     "dotenv": "^16.4.7",

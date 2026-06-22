@@ -1,5 +1,6 @@
 import { Bot, type Context } from "grammy";
 import { env } from "../config/env.js";
+import { registerBotCommands } from "../config/botCommands.js";
 import { getSession } from "../repositories/sessionRepository.js";
 import {
   cancelDevRun,
@@ -239,6 +240,7 @@ export function createBot(): Bot {
 
 export async function startBot(bot: Bot): Promise<void> {
   await bot.api.deleteWebhook({ drop_pending_updates: true });
+  await registerBotCommands(bot);
   await bot.start({
     onStart: () => {
       console.log("[bot] Long polling started");

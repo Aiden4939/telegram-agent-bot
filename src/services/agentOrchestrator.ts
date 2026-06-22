@@ -45,18 +45,24 @@ function collectAssistantText(
     .join("");
 }
 
+function agentBaseOptions(cwd: string) {
+  return {
+    apiKey: env.cursorApiKey,
+    model: { id: env.agentModel },
+    local: { cwd },
+  };
+}
+
 async function openAgent(chatId: string, sdk: CursorSdk) {
   assertCursorConfigured();
 
   const session = getSession(chatId);
   const cwd = session?.cwd || env.defaultCwd;
+  const options = agentBaseOptions(cwd);
 
   if (session?.agentId) {
     try {
-      const agent = await sdk.Agent.resume(session.agentId, {
-        apiKey: env.cursorApiKey,
-        local: { cwd },
-      });
+      const agent = await sdk.Agent.resume(session.agentId, options);
       return { agent, cwd };
     } catch (error) {
       console.warn(
@@ -66,11 +72,7 @@ async function openAgent(chatId: string, sdk: CursorSdk) {
     }
   }
 
-  const agent = await sdk.Agent.create({
-    apiKey: env.cursorApiKey,
-    model: { id: env.agentModel },
-    local: { cwd },
-  });
+  const agent = await sdk.Agent.create(options);
 
   return { agent, cwd };
 }
@@ -93,7 +95,7 @@ export async function sendDevPrompt(
   const { agent, cwd } = await openAgent(chatId, sdk);
 
   try {
-    const run = await agent.send(prompt);
+    const run = await agent.send(prompt, { model: { id: env.agentModel } });
     activeRuns.set(chatId, run);
 
     let text = "";
