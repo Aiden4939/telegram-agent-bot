@@ -1,0 +1,32 @@
+services:
+  playwright-service:
+    build: ./playwright-service
+    container_name: playwright-service
+    ports:
+      - "3100:3100"
+    restart: unless-stopped
+
+  n8n:
+    image: n8nio/n8n:1.70.3
+    container_name: n8n
+    profiles:
+      - n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=Asia/Taipei
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - BOT_INTERNAL_URL=http://host.docker.internal:3001
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+
+volumes:
+  n8n_data:

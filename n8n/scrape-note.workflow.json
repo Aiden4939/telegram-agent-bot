@@ -1,0 +1,110 @@
+{
+  "name": "scrape-note",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "scrape-note",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "scrape-note"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://playwright-service:3100/scrape",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"url\": $json.body.url } }}",
+        "options": {}
+      },
+      "id": "scrape",
+      "name": "Playwright Scrape",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"gpt-4o-mini\", \"messages\": [ { \"role\": \"system\", \"content\": \"你是筆記整理助理，用繁體中文輸出精簡摘要。\" }, { \"role\": \"user\", \"content\": \"網址：\" + $('Webhook').item.json.body.url + \"\\n標題：\" + $json.title + \"\\n內容：\\n\" + ($json.text || '').slice(0, 12000) } ] } }}",
+        "options": {}
+      },
+      "id": "openai",
+      "name": "OpenAI Summarize",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BOT_INTERNAL_URL }}/internal/notes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Internal-Secret",
+              "value": "={{ $env.INTERNAL_API_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"chatId\": $('Webhook').item.json.body.chatId, \"sourceUrl\": $('Webhook').item.json.body.url, \"title\": $('Playwright Scrape').item.json.title, \"summary\": $json.choices[0].message.content, \"rawText\": $('Playwright Scrape').item.json.text } }}",
+        "options": {}
+      },
+      "id": "save",
+      "name": "Save Note",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"noteId\": $json.noteId, \"summary\": $json.note.summary } }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [880, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Playwright Scrape", "type": "main", "index": 0 }]]
+    },
+    "Playwright Scrape": {
+      "main": [[{ "node": "OpenAI Summarize", "type": "main", "index": 0 }]]
+    },
+    "OpenAI Summarize": {
+      "main": [[{ "node": "Save Note", "type": "main", "index": 0 }]]
+    },
+    "Save Note": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
