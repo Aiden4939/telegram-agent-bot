@@ -56,3 +56,28 @@ export function getNoteById(id: number): NoteRecord | null {
 
   return row ?? null;
 }
+
+export function getNoteForChat(id: number, chatId: string): NoteRecord | null {
+  const note = getNoteById(id);
+  if (!note || note.chatId !== chatId) {
+    return null;
+  }
+  return note;
+}
+
+export function listRecentNotes(
+  chatId: string,
+  limit = 10
+): Pick<NoteRecord, "id" | "title" | "sourceUrl" | "createdAt">[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT id, title, source_url AS sourceUrl, created_at AS createdAt
+       FROM notes WHERE chat_id = ?
+       ORDER BY id DESC LIMIT ?`
+    )
+    .all(chatId, limit) as Pick<
+    NoteRecord,
+    "id" | "title" | "sourceUrl" | "createdAt"
+  >[];
+}

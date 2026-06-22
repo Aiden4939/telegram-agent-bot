@@ -30,6 +30,26 @@ function parseUserIds(raw: string): string[] {
     .filter(Boolean);
 }
 
+function parseAllowedCwdRoots(raw: string | undefined, defaultCwd: string): string[] {
+  if (raw?.trim()) {
+    return raw
+      .split(",")
+      .map((p) => path.resolve(p.trim()))
+      .filter(Boolean);
+  }
+  return [path.resolve(defaultCwd)];
+}
+
+function resolveDefaultCwd(): string {
+  const configured = process.env.DEFAULT_CWD?.trim();
+  if (configured) {
+    return path.resolve(configured);
+  }
+  return path.resolve(projectRoot, "..");
+}
+
+const defaultCwd = resolveDefaultCwd();
+
 export const env = {
   port: Number(process.env.PORT || 3001),
   telegramBotToken: requireEnv("TELEGRAM_BOT_TOKEN"),
@@ -46,6 +66,11 @@ export const env = {
   intentRouter: (process.env.INTENT_ROUTER || "llm") as "llm" | "rules",
   cursorApiKey: process.env.CURSOR_API_KEY?.trim() || "",
   agentModel: process.env.AGENT_MODEL || "composer-2.5",
-  defaultCwd: process.env.DEFAULT_CWD || path.resolve(projectRoot, ".."),
+  defaultCwd,
+  allowedCwdRoots: parseAllowedCwdRoots(process.env.ALLOWED_CWD_ROOTS, defaultCwd),
+  devBriefReply: process.env.DEV_BRIEF_REPLY !== "false",
   runTimeoutMs: Number(process.env.RUN_TIMEOUT_MS || 600000),
+  telegramMode: (process.env.TELEGRAM_MODE || "polling") as "polling" | "webhook",
+  webhookPath: process.env.WEBHOOK_PATH || "/telegram/webhook",
+  webhookUrl: process.env.WEBHOOK_URL?.trim() || "",
 };

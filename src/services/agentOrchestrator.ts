@@ -77,6 +77,21 @@ async function openAgent(chatId: string, sdk: CursorSdk) {
   return { agent, cwd };
 }
 
+const DEV_TELEGRAM_HINT = `
+
+回覆要求（Telegram 手機閱讀）：
+- 用繁體中文
+- 簡潔優先，避免長篇
+- 不要 markdown 表格
+- 若使用者未另行指定格式，用列點且 8 條以內`;
+
+function buildDevPrompt(prompt: string): string {
+  if (!env.devBriefReply) {
+    return prompt;
+  }
+  return `${prompt}${DEV_TELEGRAM_HINT}`;
+}
+
 export async function sendDevPrompt(
   chatId: string,
   prompt: string
@@ -84,6 +99,7 @@ export async function sendDevPrompt(
   assertCursorConfigured();
 
   const sdk = await loadCursorSdk();
+  const fullPrompt = buildDevPrompt(prompt);
 
   upsertSession({
     chatId,
@@ -95,7 +111,7 @@ export async function sendDevPrompt(
   const { agent, cwd } = await openAgent(chatId, sdk);
 
   try {
-    const run = await agent.send(prompt, { model: { id: env.agentModel } });
+    const run = await agent.send(fullPrompt, { model: { id: env.agentModel } });
     activeRuns.set(chatId, run);
 
     let text = "";

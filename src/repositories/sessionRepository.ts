@@ -42,3 +42,13 @@ export function clearSession(chatId: string): void {
   const db = getDb();
   db.prepare(`DELETE FROM telegram_sessions WHERE chat_id = ?`).run(chatId);
 }
+
+export function updateSessionCwd(chatId: string, cwd: string): void {
+  const existing = getSession(chatId);
+  upsertSession({
+    chatId,
+    agentId: null,
+    cwd,
+    status: existing?.status ?? "idle",
+  });
+}

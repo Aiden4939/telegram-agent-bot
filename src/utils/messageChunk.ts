@@ -25,3 +25,17 @@ export function chunkMessage(text: string, maxLength = TELEGRAM_MAX_LENGTH): str
 
   return chunks;
 }
+
+/** 輕量清理，讓純文字 Telegram 較好讀 */
+export function plainTextForTelegram(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/```[\s\S]*?```/g, (block) =>
+      block.replace(/```\w*\n?/g, "").trim()
+    )
+    .replace(/^\|(.+)\|$/gm, (line) => line.replace(/\|/g, " ").trim())
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}

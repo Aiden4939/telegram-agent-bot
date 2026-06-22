@@ -8,12 +8,12 @@ async function main(): Promise<void> {
   ensureSchema();
 
   const app = createApp();
+  const bot = createBot();
+  await startBot(bot, app);
+
   const server = app.listen(env.port, () => {
     console.log(`[app] Listening on :${env.port}`);
   });
-
-  const bot = createBot();
-  void startBot(bot);
 
   const shutdown = async (signal: string) => {
     console.log(`[app] Received ${signal}, shutting down...`);

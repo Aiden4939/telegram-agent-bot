@@ -1,7 +1,18 @@
 import { Bot, type Context } from "grammy";
-import { env } from "../config/env.js";
+import { webhookCallback } from "grammy";
+import type { Application } from "express";
+import path from "node:path";
 import { registerBotCommands } from "../config/botCommands.js";
-import { getSession } from "../repositories/sessionRepository.js";
+import { HELP_TEXT, START_TEXT } from "../config/helpText.js";
+import { env } from "../config/env.js";
+import {
+  getNoteForChat,
+  listRecentNotes,
+} from "../repositories/noteRepository.js";
+import {
+  getSession,
+  updateSessionCwd,
+} from "../repositories/sessionRepository.js";
 import {
   cancelDevRun,
   isDevRunActive,
@@ -12,6 +23,11 @@ import { extractUrl } from "./intentRouter.js";
 import { resolveIntent } from "./llmIntentRouter.js";
 import { chat } from "./llmClient.js";
 import { runScrapeNote } from "./scrapeNoteService.js";
+import { getCurrentCwd, resolveAllowedCwd } from "../utils/cwd.js";
+import {
+  chunkMessage,
+  plainTextForTelegram,
+} from "../utils/messageChunk.js";
 
 const busyScrapeChats = new Set<number>();
 
@@ -24,6 +40,38 @@ function isAllowed(userId: number | undefined): userId is number {
 
 function isBusy(chatId: number): boolean {
   return busyScrapeChats.has(chatId) || isDevRunActive(String(chatId));
+}
+
+function parseCommandArgs(text: string): string[] {
+  return text
+    .trim()
+    .split(/\s+/)
+    .slice(1)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+async function sendTextChunks(ctx: Context, text: string): Promise<void> {
+  const chunks = chunkMessage(plainTextForTelegram(text));
+  for (const chunk of chunks) {
+    await ctx.reply(chunk);
+  }
+}
+
+async function replyInChunks(
+  ctx: Context,
+  chatId: number,
+  statusMsgId: number,
+  text: string,
+  footer?: string
+): Promise<void> {
+  const body = plainTextForTelegram(text);
+  const full = footer ? `${body}\n\n${footer}` : body;
+  const chunks = chunkMessage(full);
+  await ctx.api.editMessageText(chatId, statusMsgId, chunks[0] ?? "（無回覆）");
+  for (const chunk of chunks.slice(1)) {
+    await ctx.reply(chunk);
+  }
 }
 
 async function handleScrape(ctx: Context, url: string): Promise<void> {
@@ -79,13 +127,12 @@ async function handleDev(ctx: Context, text: string): Promise<void> {
 
   try {
     const result = await sendDevPrompt(String(chatId), text);
-    const preview = result.text.slice(0, 3500);
-    const suffix = result.text.length > 3500 ? "\n\n（內容過長，已截斷）" : "";
-
-    await ctx.api.editMessageText(
+    await replyInChunks(
+      ctx,
       chatId,
       statusMsg.message_id,
-      `${preview}${suffix}\n\n— agent: ${result.agentId}`
+      result.text,
+      `— agent: ${result.agentId}`
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -112,7 +159,7 @@ async function handleChat(ctx: Context, text: string): Promise<void> {
 
   try {
     const answer = await chat(text);
-    await ctx.api.editMessageText(chatId, statusMsg.message_id, answer);
+    await replyInChunks(ctx, chatId, statusMsg.message_id, answer);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await ctx.api.editMessageText(
@@ -134,18 +181,11 @@ export function createBot(): Bot {
   });
 
   bot.command("start", async (ctx) => {
-    await ctx.reply(
-      [
-        "Telegram 遠端 Agent（Phase 2）",
-        "",
-        "AI 會自動判斷你的意圖：",
-        "• 存網頁筆記 → 爬蟲 + 摘要 + 存檔",
-        "• 開發任務 → Cursor SDK（需 CURSOR_API_KEY）",
-        "• 其他 → AI 閒聊",
-        "",
-        "指令：/status /new /cancel",
-      ].join("\n")
-    );
+    await ctx.reply(START_TEXT);
+  });
+
+  bot.command("help", async (ctx) => {
+    await sendTextChunks(ctx, HELP_TEXT);
   });
 
   bot.command("status", async (ctx) => {
@@ -161,11 +201,104 @@ export function createBot(): Bot {
       [
         `意圖路由：${env.intentRouter}`,
         `存筆記執行：${env.scrapeMode}`,
-        `開發 cwd：${session?.cwd || env.defaultCwd}`,
+        `Telegram 模式：${env.telegramMode}`,
+        `開發 cwd：${getCurrentCwd(String(chatId))}`,
         `Agent session：${session?.agentId || "（無）"}`,
         `Cursor SDK：${env.cursorApiKey ? "已設定" : "未設定"}`,
+        `簡短 dev 回覆：${env.devBriefReply ? "開啟" : "關閉"}`,
         `狀態：${busy ? "處理中" : "閒置"}`,
       ].join("\n")
+    );
+  });
+
+  bot.command("notes", async (ctx) => {
+    const chatId = ctx.chat?.id;
+    if (!chatId) {
+      return;
+    }
+
+    const notes = listRecentNotes(String(chatId), 10);
+    if (notes.length === 0) {
+      await ctx.reply("尚無筆記。傳「幫我把 https://... 存進筆記」即可建立。");
+      return;
+    }
+
+    const lines = notes.map((note) => {
+      const label = note.title?.trim() || note.sourceUrl;
+      return `#${note.id} ${label}\n  ${note.createdAt}`;
+    });
+
+    await ctx.reply(["最近筆記：", "", ...lines].join("\n"));
+  });
+
+  bot.command("note", async (ctx) => {
+    const chatId = ctx.chat?.id;
+    if (!chatId || !ctx.message?.text) {
+      return;
+    }
+
+    const args = parseCommandArgs(ctx.message.text);
+    const id = Number(args[0]);
+    if (!Number.isInteger(id) || id <= 0) {
+      await ctx.reply("用法：/note <id>，例如 /note 1");
+      return;
+    }
+
+    const note = getNoteForChat(id, String(chatId));
+    if (!note) {
+      await ctx.reply(`找不到筆記 #${id}。`);
+      return;
+    }
+
+    const titleLine = note.title ? `標題：${note.title}\n` : "";
+    const preview = note.summary.slice(0, 3000);
+    const suffix = note.summary.length > 3000 ? "\n\n（摘要已截斷）" : "";
+
+    await ctx.reply(
+      [
+        `筆記 #${note.id}`,
+        titleLine + `網址：${note.sourceUrl}`,
+        `時間：${note.createdAt}`,
+        "",
+        preview + suffix,
+      ].join("\n")
+    );
+  });
+
+  bot.command("cwd", async (ctx) => {
+    const chatId = ctx.chat?.id;
+    if (!chatId || !ctx.message?.text) {
+      return;
+    }
+
+    const args = parseCommandArgs(ctx.message.text);
+    const chatKey = String(chatId);
+
+    if (args.length === 0) {
+      await ctx.reply(
+        [
+          `目前開發目錄：`,
+          getCurrentCwd(chatKey),
+          "",
+          `允許根目錄：`,
+          ...env.allowedCwdRoots.map((root) => `• ${root}`),
+          "",
+          "切換：/cwd <路徑>",
+        ].join("\n")
+      );
+      return;
+    }
+
+    const requested = path.resolve(args.join(" "));
+    const resolved = resolveAllowedCwd(requested);
+    if (!resolved) {
+      await ctx.reply("此路徑不在允許清單內，請換一個目錄。");
+      return;
+    }
+
+    updateSessionCwd(chatKey, resolved);
+    await ctx.reply(
+      `已切換開發目錄為：\n${resolved}\n\n（已清除 agent session，下次開發任務會用新目錄）`
     );
   });
 
@@ -238,10 +371,25 @@ export function createBot(): Bot {
   return bot;
 }
 
-export async function startBot(bot: Bot): Promise<void> {
-  await bot.api.deleteWebhook({ drop_pending_updates: true });
+export async function startBot(bot: Bot, app?: Application): Promise<void> {
   await registerBotCommands(bot);
-  await bot.start({
+
+  if (env.telegramMode === "webhook") {
+    if (!env.webhookUrl) {
+      throw new Error("WEBHOOK_URL is required when TELEGRAM_MODE=webhook");
+    }
+    if (!app) {
+      throw new Error("Express app is required for webhook mode");
+    }
+
+    app.use(env.webhookPath, webhookCallback(bot, "express"));
+    await bot.api.setWebhook(env.webhookUrl);
+    console.log(`[bot] Webhook mode: ${env.webhookUrl}`);
+    return;
+  }
+
+  await bot.api.deleteWebhook({ drop_pending_updates: true });
+  void bot.start({
     onStart: () => {
       console.log("[bot] Long polling started");
     },
