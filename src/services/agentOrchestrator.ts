@@ -181,6 +181,70 @@ export async function cancelDevRun(chatId: string): Promise<boolean> {
   return false;
 }
 
+export interface ForceResetDevResult {
+  devRunCancelled: boolean;
+  hadActiveRun: boolean;
+  sessionReset: boolean;
+  previousSessionStatus: string | null;
+}
+
+export async function forceResetDev(
+  chatId: string
+): Promise<ForceResetDevResult> {
+  const sessionBefore = getSession(chatId);
+  const previousSessionStatus = sessionBefore?.status ?? null;
+  const hadActiveRun = activeRuns.has(chatId);
+  let devRunCancelled = false;
+
+  const run = activeRuns.get(chatId);
+  if (run?.supports("cancel")) {
+    try {
+      await run.cancel();
+      devRunCancelled = true;
+    } catch (error) {
+      console.warn(
+        `[agent] force reset cancel failed for chat ${chatId}:`,
+        error
+      );
+    }
+  }
+  activeRuns.delete(chatId);
+
+  let sessionReset = false;
+  if (
+    sessionBefore &&
+    (sessionBefore.status !== "idle" || sessionBefore.agentId)
+  ) {
+    upsertSession({
+      chatId,
+      agentId: null,
+      cwd: sessionBefore.cwd,
+      status: "idle",
+    });
+    sessionReset = true;
+  }
+
+  return {
+    devRunCancelled,
+    hadActiveRun,
+    sessionReset,
+    previousSessionStatus,
+  };
+}
+
+type TestActiveRun = Pick<SdkRun, "supports" | "cancel">;
+
+export function setActiveRunForTest(
+  chatId: string,
+  run: TestActiveRun
+): void {
+  activeRuns.set(chatId, run as SdkRun);
+}
+
+export function clearActiveRunsForTest(): void {
+  activeRuns.clear();
+}
+
 export function isDevRunActive(chatId: string): boolean {
   return activeRuns.has(chatId);
 }

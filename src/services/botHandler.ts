@@ -19,6 +19,18 @@ import {
   sendDevPrompt,
   startNewDevSession,
 } from "./agentOrchestrator.js";
+import {
+  clearScrapeBusy,
+  isChatTaskLocked,
+  isScrapeBusy,
+  markPendingDev,
+  markScrapeBusy,
+  clearPendingDev,
+} from "./chatTaskState.js";
+import {
+  formatForceResetMessage,
+  performForceReset,
+} from "./forceReset.js";
 import { extractUrl } from "./intentRouter.js";
 import { resolveIntent } from "./llmIntentRouter.js";
 import { chat } from "./llmClient.js";
@@ -29,9 +41,6 @@ import {
   plainTextForTelegram,
 } from "../utils/messageChunk.js";
 
-const busyScrapeChats = new Set<number>();
-const pendingDevChats = new Set<number>();
-
 function isAllowed(userId: number | undefined): userId is number {
   if (!userId) {
     return false;
@@ -40,11 +49,7 @@ function isAllowed(userId: number | undefined): userId is number {
 }
 
 function isBusy(chatId: number): boolean {
-  return (
-    busyScrapeChats.has(chatId) ||
-    pendingDevChats.has(chatId) ||
-    isDevRunActive(String(chatId))
-  );
+  return isChatTaskLocked(chatId) || isDevRunActive(String(chatId));
 }
 
 function parseCommandArgs(text: string): string[] {
@@ -86,11 +91,11 @@ async function handleScrape(ctx: Context, url: string): Promise<void> {
   }
 
   if (isBusy(chatId)) {
-    await ctx.reply("目前有任務進行中，請稍候或使用 /cancel。");
+    await ctx.reply("目前有任務進行中，請稍候或使用 /cancel、/reset。");
     return;
   }
 
-  busyScrapeChats.add(chatId);
+  markScrapeBusy(chatId);
   const statusMsg = await ctx.reply(`處理中…正在抓取：${url}`);
 
   void (async () => {
@@ -114,7 +119,7 @@ async function handleScrape(ctx: Context, url: string): Promise<void> {
         `處理失敗：${message}`
       );
     } finally {
-      busyScrapeChats.delete(chatId);
+      clearScrapeBusy(chatId);
     }
   })();
 }
@@ -126,11 +131,11 @@ async function handleDev(ctx: Context, text: string): Promise<void> {
   }
 
   if (isBusy(chatId)) {
-    await ctx.reply("目前有任務進行中，請稍候或使用 /cancel。");
+    await ctx.reply("目前有任務進行中，請稍候或使用 /cancel、/reset。");
     return;
   }
 
-  pendingDevChats.add(chatId);
+  markPendingDev(chatId);
   const statusMsg = await ctx.reply("Agent 開發任務處理中…");
 
   void (async () => {
@@ -151,7 +156,7 @@ async function handleDev(ctx: Context, text: string): Promise<void> {
         `開發任務失敗：${message}`
       );
     } finally {
-      pendingDevChats.delete(chatId);
+      clearPendingDev(chatId);
     }
   })();
 }
@@ -323,7 +328,7 @@ export function createBot(): Bot {
     }
 
     if (isBusy(chatId)) {
-      await ctx.reply("目前有任務進行中，請先 /cancel。");
+      await ctx.reply("目前有任務進行中，請先 /cancel 或 /reset。");
       return;
     }
 
@@ -338,8 +343,8 @@ export function createBot(): Bot {
     }
 
     const cancelled = await cancelDevRun(String(chatId));
-    if (busyScrapeChats.has(chatId)) {
-      await ctx.reply("爬蟲任務進行中，暫不支援中途取消。");
+    if (isScrapeBusy(chatId)) {
+      await ctx.reply("爬蟲任務進行中，暫不支援中途取消。卡死時請用 /reset。");
       return;
     }
 
@@ -348,7 +353,17 @@ export function createBot(): Bot {
       return;
     }
 
-    await ctx.reply("目前沒有可取消的開發任務。");
+    await ctx.reply("目前沒有可取消的開發任務。若狀態異常請用 /reset。");
+  });
+
+  bot.command("reset", async (ctx) => {
+    const chatId = ctx.chat?.id;
+    if (!chatId) {
+      return;
+    }
+
+    const report = await performForceReset(String(chatId));
+    await ctx.reply(formatForceResetMessage(report));
   });
 
   bot.on("message:text", async (ctx) => {

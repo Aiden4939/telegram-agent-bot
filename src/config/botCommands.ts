@@ -9,6 +9,7 @@ export const BOT_COMMANDS = [
   { command: "cwd", description: "查看或切換開發目錄" },
   { command: "new", description: "開啟新的開發 Agent session" },
   { command: "cancel", description: "取消進行中的開發任務" },
+  { command: "reset", description: "緊急重置任務狀態（卡死時用）" },
 ] as const;
 
 export async function registerBotCommands(bot: Bot): Promise<void> {

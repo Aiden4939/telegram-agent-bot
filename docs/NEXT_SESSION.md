@@ -41,6 +41,7 @@
 - [x] **啟動回收殭屍 session**：`recoverStaleSessions()` 將 DB 中 `running` 重置為 `idle`
 - [x] **延後寫入 running**：`openAgent()` 成功後才標 `status=running`
 - [x] **dev 並發鎖**：`pendingDevChats` 防止連續觸發多個 dev 任務
+- [x] **`/reset` 緊急重置**：清 in-memory 鎖、嘗試 cancel dev、重置 DB session（2026-06-23）
 
 ### 遠端部署狀態
 
@@ -105,7 +106,7 @@ curl -sS http://127.0.0.1:8080/health -H "Host: tgbot.inwanding.com"
 
 ## D. 尚未完成 / 可選改進
 
-- [ ] **部署本次修正到遠端**（push `main` → GHCR build → `docker compose pull && up -d`）
+- [ ] **部署最新 image 到遠端**（含 webhook 修正 + `/reset`）
 - [ ] 實作 `RUN_TIMEOUT_MS`（env 已定義，程式尚未使用）
 - [ ] deploy workflow 加 `git pull`（避免主機 compose 過期）
 - [ ] `docker-compose.prod-like.yml` 本機模擬遠端

@@ -17,6 +17,7 @@ export const HELP_TEXT = [
   "/cwd [路徑] — 查看或切換開發目錄",
   "/new — 新開發 session",
   "/cancel — 取消開發任務",
+  "/reset — 緊急重置（卡死時用）",
   "/help — 本說明",
 ].join("\n");
 
