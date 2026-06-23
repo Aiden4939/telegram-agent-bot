@@ -52,3 +52,15 @@ export function updateSessionCwd(chatId: string, cwd: string): void {
     status: existing?.status ?? "idle",
   });
 }
+
+export function recoverStaleSessions(): number {
+  const db = getDb();
+  const result = db
+    .prepare(
+      `UPDATE telegram_sessions
+       SET status = 'idle', updated_at = datetime('now')
+       WHERE status = 'running'`
+    )
+    .run();
+  return result.changes;
+}

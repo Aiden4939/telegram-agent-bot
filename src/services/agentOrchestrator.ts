@@ -101,14 +101,14 @@ export async function sendDevPrompt(
   const sdk = await loadCursorSdk();
   const fullPrompt = buildDevPrompt(prompt);
 
+  const { agent, cwd } = await openAgent(chatId, sdk);
+
   upsertSession({
     chatId,
-    agentId: getSession(chatId)?.agentId ?? null,
-    cwd: getSession(chatId)?.cwd || env.defaultCwd,
+    agentId: agent.agentId,
+    cwd,
     status: "running",
   });
-
-  const { agent, cwd } = await openAgent(chatId, sdk);
 
   try {
     const run = await agent.send(fullPrompt, { model: { id: env.agentModel } });

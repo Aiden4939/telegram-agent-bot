@@ -30,6 +30,7 @@ import {
 } from "../utils/messageChunk.js";
 
 const busyScrapeChats = new Set<number>();
+const pendingDevChats = new Set<number>();
 
 function isAllowed(userId: number | undefined): userId is number {
   if (!userId) {
@@ -39,7 +40,11 @@ function isAllowed(userId: number | undefined): userId is number {
 }
 
 function isBusy(chatId: number): boolean {
-  return busyScrapeChats.has(chatId) || isDevRunActive(String(chatId));
+  return (
+    busyScrapeChats.has(chatId) ||
+    pendingDevChats.has(chatId) ||
+    isDevRunActive(String(chatId))
+  );
 }
 
 function parseCommandArgs(text: string): string[] {
@@ -88,28 +93,30 @@ async function handleScrape(ctx: Context, url: string): Promise<void> {
   busyScrapeChats.add(chatId);
   const statusMsg = await ctx.reply(`處理中…正在抓取：${url}`);
 
-  try {
-    const result = await runScrapeNote({ chatId, url });
-    const preview = result.summary.slice(0, 500);
-    const titleLine = result.title ? `\n標題：${result.title}` : "";
+  void (async () => {
+    try {
+      const result = await runScrapeNote({ chatId, url });
+      const preview = result.summary.slice(0, 500);
+      const titleLine = result.title ? `\n標題：${result.title}` : "";
 
-    await ctx.api.editMessageText(
-      chatId,
-      statusMsg.message_id,
-      `已完成，筆記 #${result.noteId}${titleLine}\n\n${preview}${
-        result.summary.length > 500 ? "…" : ""
-      }`
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await ctx.api.editMessageText(
-      chatId,
-      statusMsg.message_id,
-      `處理失敗：${message}`
-    );
-  } finally {
-    busyScrapeChats.delete(chatId);
-  }
+      await ctx.api.editMessageText(
+        chatId,
+        statusMsg.message_id,
+        `已完成，筆記 #${result.noteId}${titleLine}\n\n${preview}${
+          result.summary.length > 500 ? "…" : ""
+        }`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await ctx.api.editMessageText(
+        chatId,
+        statusMsg.message_id,
+        `處理失敗：${message}`
+      );
+    } finally {
+      busyScrapeChats.delete(chatId);
+    }
+  })();
 }
 
 async function handleDev(ctx: Context, text: string): Promise<void> {
@@ -123,25 +130,30 @@ async function handleDev(ctx: Context, text: string): Promise<void> {
     return;
   }
 
+  pendingDevChats.add(chatId);
   const statusMsg = await ctx.reply("Agent 開發任務處理中…");
 
-  try {
-    const result = await sendDevPrompt(String(chatId), text);
-    await replyInChunks(
-      ctx,
-      chatId,
-      statusMsg.message_id,
-      result.text,
-      `— agent: ${result.agentId}`
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await ctx.api.editMessageText(
-      chatId,
-      statusMsg.message_id,
-      `開發任務失敗：${message}`
-    );
-  }
+  void (async () => {
+    try {
+      const result = await sendDevPrompt(String(chatId), text);
+      await replyInChunks(
+        ctx,
+        chatId,
+        statusMsg.message_id,
+        result.text,
+        `— agent: ${result.agentId}`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await ctx.api.editMessageText(
+        chatId,
+        statusMsg.message_id,
+        `開發任務失敗：${message}`
+      );
+    } finally {
+      pendingDevChats.delete(chatId);
+    }
+  })();
 }
 
 async function handleChat(ctx: Context, text: string): Promise<void> {
@@ -157,17 +169,19 @@ async function handleChat(ctx: Context, text: string): Promise<void> {
 
   const statusMsg = await ctx.reply("思考中…");
 
-  try {
-    const answer = await chat(text);
-    await replyInChunks(ctx, chatId, statusMsg.message_id, answer);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    await ctx.api.editMessageText(
-      chatId,
-      statusMsg.message_id,
-      `回覆失敗：${message}`
-    );
-  }
+  void (async () => {
+    try {
+      const answer = await chat(text);
+      await replyInChunks(ctx, chatId, statusMsg.message_id, answer);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await ctx.api.editMessageText(
+        chatId,
+        statusMsg.message_id,
+        `回覆失敗：${message}`
+      );
+    }
+  })();
 }
 
 export function createBot(): Bot {
@@ -382,7 +396,13 @@ export async function startBot(bot: Bot, app?: Application): Promise<void> {
       throw new Error("Express app is required for webhook mode");
     }
 
-    app.use(env.webhookPath, webhookCallback(bot, "express"));
+    app.use(
+      env.webhookPath,
+      webhookCallback(bot, "express", {
+        onTimeout: "return",
+        timeoutMilliseconds: 10_000,
+      })
+    );
     await bot.api.setWebhook(env.webhookUrl);
     console.log(`[bot] Webhook mode: ${env.webhookUrl}`);
     return;

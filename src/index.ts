@@ -2,10 +2,16 @@ import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { ensureSchema } from "./db/schema.js";
 import { closeDb } from "./db/database.js";
+import { recoverStaleSessions } from "./repositories/sessionRepository.js";
 import { createBot, startBot } from "./services/botHandler.js";
 
 async function main(): Promise<void> {
   ensureSchema();
+
+  const recovered = recoverStaleSessions();
+  if (recovered > 0) {
+    console.warn(`[session] Recovered ${recovered} stale running session(s)`);
+  }
 
   const app = createApp();
   const bot = createBot();
