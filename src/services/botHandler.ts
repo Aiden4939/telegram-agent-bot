@@ -6,10 +6,6 @@ import { registerBotCommands } from "../config/botCommands.js";
 import { HELP_TEXT, START_TEXT } from "../config/helpText.js";
 import { env } from "../config/env.js";
 import {
-  getNoteForChat,
-  listRecentNotes,
-} from "../repositories/noteRepository.js";
-import {
   getSession,
   updateSessionCwd,
 } from "../repositories/sessionRepository.js";
@@ -107,7 +103,7 @@ async function handleScrape(ctx: Context, url: string): Promise<void> {
       await ctx.api.editMessageText(
         chatId,
         statusMsg.message_id,
-        `已完成，筆記 #${result.noteId}${titleLine}\n\n${preview}${
+        `已完成，來源：${result.sourceUrl}${titleLine}\n\n${preview}${
           result.summary.length > 500 ? "…" : ""
         }`
       );
@@ -189,6 +185,21 @@ async function handleChat(ctx: Context, text: string): Promise<void> {
   })();
 }
 
+async function handleOps(ctx: Context): Promise<void> {
+  const chatId = ctx.chat?.id;
+  if (!chatId) {
+    return;
+  }
+
+  await ctx.reply(
+    [
+      "已辨識為主機操作（ops）需求。",
+      "目前尚未啟用主機操作執行器，為避免誤操作，暫不自動執行指令。",
+      "請先使用既有 /status、/reset，或改以開發任務描述希望我調整的程式碼。"
+    ].join("\n")
+  );
+}
+
 export function createBot(): Bot {
   const bot = new Bot(env.telegramBotToken);
 
@@ -219,7 +230,7 @@ export function createBot(): Bot {
     await ctx.reply(
       [
         `意圖路由：${env.intentRouter}`,
-        `存筆記執行：${env.scrapeMode}`,
+        `網頁分析執行：${env.scrapeMode}`,
         `Telegram 模式：${env.telegramMode}`,
         `開發執行：${env.devRuntime}`,
         `開發 cwd：${getCurrentCwd(String(chatId))}`,
@@ -228,60 +239,6 @@ export function createBot(): Bot {
         `Cursor SDK：${env.cursorApiKey ? "已設定" : "未設定"}`,
         `簡短 dev 回覆：${env.devBriefReply ? "開啟" : "關閉"}`,
         `狀態：${busy ? "處理中" : "閒置"}`,
-      ].join("\n")
-    );
-  });
-
-  bot.command("notes", async (ctx) => {
-    const chatId = ctx.chat?.id;
-    if (!chatId) {
-      return;
-    }
-
-    const notes = listRecentNotes(String(chatId), 10);
-    if (notes.length === 0) {
-      await ctx.reply("尚無筆記。傳「幫我把 https://... 存進筆記」即可建立。");
-      return;
-    }
-
-    const lines = notes.map((note) => {
-      const label = note.title?.trim() || note.sourceUrl;
-      return `#${note.id} ${label}\n  ${note.createdAt}`;
-    });
-
-    await ctx.reply(["最近筆記：", "", ...lines].join("\n"));
-  });
-
-  bot.command("note", async (ctx) => {
-    const chatId = ctx.chat?.id;
-    if (!chatId || !ctx.message?.text) {
-      return;
-    }
-
-    const args = parseCommandArgs(ctx.message.text);
-    const id = Number(args[0]);
-    if (!Number.isInteger(id) || id <= 0) {
-      await ctx.reply("用法：/note <id>，例如 /note 1");
-      return;
-    }
-
-    const note = getNoteForChat(id, String(chatId));
-    if (!note) {
-      await ctx.reply(`找不到筆記 #${id}。`);
-      return;
-    }
-
-    const titleLine = note.title ? `標題：${note.title}\n` : "";
-    const preview = note.summary.slice(0, 3000);
-    const suffix = note.summary.length > 3000 ? "\n\n（摘要已截斷）" : "";
-
-    await ctx.reply(
-      [
-        `筆記 #${note.id}`,
-        titleLine + `網址：${note.sourceUrl}`,
-        `時間：${note.createdAt}`,
-        "",
-        preview + suffix,
       ].join("\n")
     );
   });
@@ -389,6 +346,11 @@ export function createBot(): Bot {
 
     if (routed.intent === "dev") {
       await handleDev(ctx, text);
+      return;
+    }
+
+    if (routed.intent === "ops") {
+      await handleOps(ctx);
       return;
     }
 

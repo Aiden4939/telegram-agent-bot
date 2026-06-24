@@ -1,13 +1,14 @@
 # Telegram Agent Bot
 
-用手機 Telegram 遠端觸發：爬網頁存筆記、Cursor Agent 開發任務、OpenAI 閒聊。
+用手機 Telegram 遠端觸發：網頁抓取分析、Cursor Agent 開發任務、OpenAI 閒聊。
 
 ## 架構
 
 ```
 Telegram → telegram-agent-bot (grammy + Express)
-              ├─ scrape → playwright-service → OpenAI → SQLite
+              ├─ scrape → playwright-service → OpenAI（回傳分析）
               ├─ dev    → Cursor SDK（local 或 cloud runtime）
+              ├─ ops    → 主機操作意圖（目前僅安全提示）
               └─ chat   → OpenAI
 ```
 
@@ -15,7 +16,7 @@ Telegram → telegram-agent-bot (grammy + Express)
 
 ## 前置需求
 
-- Node.js **>= 22.13**（Cursor SDK 需要；存筆記/閒聊可用 20+）
+- Node.js **>= 22.13**（Cursor SDK 需要；網頁分析/閒聊可用 20+）
 - Telegram Bot Token、OpenAI API Key、你的 Telegram userId
 - Playwright（本機 dev 需 `npx playwright install chromium`）
 
@@ -65,7 +66,7 @@ node ./node_modules/tsx/dist/cli.mjs watch src/index.ts
 ### 4. 測試
 
 ```
-幫我把 https://example.com 存進筆記
+幫我分析 https://example.com 並整理重點
 ```
 
 ```
@@ -93,13 +94,12 @@ docker compose up -d
 | `/start` | 快速開始 |
 | `/help` | 完整使用說明 |
 | `/status` | 模式、session、cwd、狀態 |
-| `/notes` | 列出最近 10 筆筆記 |
-| `/note <id>` | 查看筆記詳情 |
 | `/cwd [路徑]` | 查看或切換開發目錄 |
 | `/new` | 開新開發 Agent session |
 | `/cancel` | 取消進行中的開發任務 |
+| `/reset` | 緊急重置任務狀態（卡死時用） |
 
-直接傳文字會由 AI 自動判斷 scrape / dev / chat。
+直接傳文字會由 AI 自動判斷 scrape / dev / ops / chat。
 
 ## Webhook 部署
 
@@ -138,8 +138,9 @@ docker compose --profile n8n up -d
 ```
 
 於 n8n UI（http://localhost:5678）匯入 `n8n/scrape-note.workflow.json`，啟用 workflow 後測試。
+Webhook 回應至少需包含 `summary`，可選包含 `sourceUrl`、`title`。
 
 ## API
 
 - `GET /health` — 健康檢查
-- `POST /internal/notes` — n8n 回寫筆記（Header: `X-Internal-Secret`）
+- `POST /internal/notes` — n8n 回傳分析結果（Header: `X-Internal-Secret`）

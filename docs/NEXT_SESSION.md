@@ -1,7 +1,7 @@
 # 下次對話接手指南（NEXT_SESSION）
 
 > **用途：** 換裝置、新開 Cursor 對話時先讀本檔。  
-> **最後更新：** 2026-06-23  
+> **最後更新：** 2026-06-24  
 > **Repo：** https://github.com/Aiden4939/telegram-agent-bot  
 > **Infra：** https://github.com/Aiden4939/inwanding-infra（部署見 `docs/DEPLOY_TELEGRAM_BOT.md`）
 
@@ -13,8 +13,9 @@
 
 | 意圖 | 行為 |
 |------|------|
-| `scrape` | 爬網頁 → OpenAI 摘要 → SQLite 筆記 |
+| `scrape` | 爬網頁 → OpenAI 摘要 → 直接回傳（不存筆記） |
 | `dev` | Cursor SDK local runtime（讀 `DEFAULT_CWD` 程式碼） |
+| `ops` | 主機/服務操作需求（目前先回安全提示） |
 | `chat` | OpenAI 閒聊 |
 
 技術棧：grammy + Express + SQLite + playwright-service + OpenAI + `@cursor/sdk`
@@ -26,13 +27,21 @@
 ### 功能（Phase 1–2）
 
 - [x] 意圖路由（LLM，失敗退回規則）
-- [x] 存筆記（inline / 可選 n8n）
+- [x] 網頁抓取分析（inline / 可選 n8n）
 - [x] Cursor SDK 開發任務 + session（`/new`、`/cancel`）
-- [x] 指令：`/start` `/help` `/status` `/notes` `/note` `/cwd`
+- [x] 指令：`/start` `/help` `/status` `/cwd` `/new` `/cancel` `/reset`
 - [x] dev 回覆：簡短提示 + Telegram 分段傳送
 - [x] webhook 模式（遠端用）/ polling 模式（本機預設）
 - [x] Dockerfile + 本機 `docker-compose.yml`
 - [x] GHCR CI：push `main` → 建 `telegram-agent-bot` + `telegram-playwright-service` image
+
+### 最新變更（2026-06-24）
+
+- [x] 新增 `ops` 意圖（LLM + rules），主機操作需求先走安全提示
+- [x] 移除 `/notes`、`/note` 指令與對應文案
+- [x] `scrape` 改為「只分析回傳，不落地筆記」
+- [x] n8n scrape 回應契約改為至少回傳 `summary`（`sourceUrl/title` 選填）
+- [x] rules fallback 補回舊關鍵字（`存/保存/筆記`）避免誤判
 
 ### 穩定性修正（2026-06-23）
 
@@ -58,7 +67,8 @@
 | `f0bb594` | GHCR build workflow |
 | `f245a04` | NEXT_SESSION 交接文件 |
 | `fd196c0` | Node 22 原生 fetch 修 OpenAI |
-| *pending* | fix webhook crash loop on long dev tasks |
+| `2f877db` | fix webhook crash loop on long dev tasks |
+| *pending* | feat: add ops intent and switch scrape to analysis-only |
 
 ### Infra（`inwanding-infra`）
 
@@ -185,7 +195,7 @@ docs/NEXT_SESSION.md            # 本檔
 |---|------|-------------------|
 | 啟動 | tsx watch | GHCR image + infra compose |
 | Telegram | polling | webhook → tgbot.inwanding.com |
-| 筆記 DB | `./data/bot.db` | volume `telegram_bot_data` |
+| Session DB | `./data/bot.db` | volume `telegram_bot_data` |
 | 程式碼 | `DEFAULT_CWD` 本機路徑 | `/workspace` 掛載 |
 
 ### 遠端更新部署

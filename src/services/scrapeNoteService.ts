@@ -1,4 +1,3 @@
-import { createNote } from "../repositories/noteRepository.js";
 import { summarizeWebPage } from "./llmClient.js";
 import { scrapeUrl } from "./playwrightClient.js";
 import { triggerScrapeNoteViaN8n } from "./workflowClient.js";
@@ -10,7 +9,7 @@ export interface ScrapeNoteInput {
 }
 
 export interface ScrapeNoteOutput {
-  noteId: number;
+  sourceUrl: string;
   summary: string;
   title: string | null;
 }
@@ -21,9 +20,9 @@ export async function runScrapeNote(
   if (env.scrapeMode === "n8n") {
     const result = await triggerScrapeNoteViaN8n(input.url, input.chatId);
     return {
-      noteId: result.noteId,
+      sourceUrl: result.sourceUrl || input.url,
       summary: result.summary,
-      title: null,
+      title: result.title ?? null,
     };
   }
 
@@ -34,17 +33,9 @@ export async function runScrapeNote(
     scraped.text
   );
 
-  const note = createNote({
-    chatId: String(input.chatId),
-    sourceUrl: scraped.url,
-    title: scraped.title,
-    summary,
-    rawText: scraped.text.slice(0, 50000),
-  });
-
   return {
-    noteId: note.id,
-    summary: note.summary,
-    title: note.title,
+    sourceUrl: scraped.url,
+    summary,
+    title: scraped.title,
   };
 }

@@ -1,7 +1,8 @@
 import { env } from "../config/env.js";
 
 export interface ScrapeNoteResult {
-  noteId: number;
+  sourceUrl?: string;
+  title?: string;
   summary: string;
 }
 
@@ -30,17 +31,19 @@ export async function triggerScrapeNoteViaN8n(
     }
 
     const data = (await response.json()) as {
-      noteId?: number;
+      sourceUrl?: string;
+      title?: string;
       summary?: string;
     };
 
-    if (!data.noteId) {
-      throw new Error("n8n response missing noteId");
+    if (!data.summary?.trim()) {
+      throw new Error("n8n response missing summary");
     }
 
     return {
-      noteId: data.noteId,
-      summary: data.summary ?? "",
+      sourceUrl: data.sourceUrl,
+      title: data.title,
+      summary: data.summary,
     };
   } finally {
     clearTimeout(timeout);
