@@ -46,6 +46,37 @@ function collectAssistantText(
 }
 
 function agentBaseOptions(cwd: string) {
+  if (env.devRuntime === "cloud") {
+    if (env.cloudRepos.length === 0) {
+      throw new Error(
+        "DEV_RUNTIME=cloud 時，必須設定 CLOUD_REPOS（例如 Aiden4939/line-reminder-bot）。"
+      );
+    }
+
+    const repos = env.cloudRepos.map((repo) => {
+      const [owner, name] = repo.split("/");
+      if (!owner || !name) {
+        throw new Error(
+          `CLOUD_REPOS 格式錯誤：${repo}（需為 owner/repo）`
+        );
+      }
+      return {
+        url: `https://github.com/${owner}/${name}.git`,
+        startingRef: env.cloudBaseBranch,
+      };
+    });
+
+    return {
+      apiKey: env.cursorApiKey,
+      model: { id: env.agentModel },
+      cloud: {
+        repos,
+        autoCreatePR: env.cloudAutoCreatePr,
+        skipReviewerRequest: env.cloudSkipReviewerRequest,
+      },
+    };
+  }
+
   return {
     apiKey: env.cursorApiKey,
     model: { id: env.agentModel },
@@ -59,11 +90,15 @@ async function openAgent(chatId: string, sdk: CursorSdk) {
   const session = getSession(chatId);
   const cwd = session?.cwd || env.defaultCwd;
   const options = agentBaseOptions(cwd);
+  const workspaceLabel =
+    env.devRuntime === "cloud"
+      ? `cloud:${env.cloudRepos.join(",")}`
+      : cwd;
 
   if (session?.agentId) {
     try {
       const agent = await sdk.Agent.resume(session.agentId, options);
-      return { agent, cwd };
+      return { agent, cwd: workspaceLabel };
     } catch (error) {
       console.warn(
         `[agent] Resume failed for chat ${chatId}, creating new agent:`,
@@ -74,7 +109,7 @@ async function openAgent(chatId: string, sdk: CursorSdk) {
 
   const agent = await sdk.Agent.create(options);
 
-  return { agent, cwd };
+  return { agent, cwd: workspaceLabel };
 }
 
 const DEV_TELEGRAM_HINT = `

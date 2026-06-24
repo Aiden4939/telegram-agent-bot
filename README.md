@@ -7,7 +7,7 @@
 ```
 Telegram → telegram-agent-bot (grammy + Express)
               ├─ scrape → playwright-service → OpenAI → SQLite
-              ├─ dev    → Cursor SDK (local runtime)
+              ├─ dev    → Cursor SDK（local 或 cloud runtime）
               └─ chat   → OpenAI
 ```
 
@@ -82,7 +82,9 @@ docker compose up -d
 
 會同時啟動 `playwright-service` 與 `telegram-bot`。SQLite 資料存在 volume `bot_data`。
 
-> **開發任務（Cursor SDK）**：容器內需能存取你的程式碼目錄，並設定 `CURSOR_API_KEY`。若要在 Docker 跑 dev 任務，請額外掛載工作目錄並將 `DEFAULT_CWD` 改為容器內路徑。
+> **開發任務（Cursor SDK）**：
+> - `DEV_RUNTIME=local`：容器內需能存取程式碼目錄，並設定 `DEFAULT_CWD`
+> - `DEV_RUNTIME=cloud`：由 Cursor Cloud Agent 在雲端 clone `CLOUD_REPOS` 執行，建議搭配 `CLOUD_AUTO_CREATE_PR=true`
 
 ## 指令
 
@@ -119,6 +121,9 @@ PORT=3001
 | 變數 | 說明 |
 |------|------|
 | `CURSOR_API_KEY` | Cursor SDK（開發任務） |
+| `DEV_RUNTIME` | `local` 或 `cloud`（建議 cloud） |
+| `CLOUD_REPOS` | Cloud Agent 目標 repo（`owner/repo`，可多個） |
+| `CLOUD_AUTO_CREATE_PR` | Cloud Agent 完成後是否自動開 PR |
 | `DEFAULT_CWD` | Agent 預設工作目錄 |
 | `ALLOWED_CWD_ROOTS` | `/cwd` 允許切換的根目錄（逗號分隔） |
 | `DEV_BRIEF_REPLY` | 開發任務自動加簡短回覆提示（預設 true） |

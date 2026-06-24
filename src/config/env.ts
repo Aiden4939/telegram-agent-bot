@@ -30,6 +30,16 @@ function parseUserIds(raw: string): string[] {
     .filter(Boolean);
 }
 
+function parseCsv(raw: string | undefined): string[] {
+  if (!raw?.trim()) {
+    return [];
+  }
+  return raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 function parseAllowedCwdRoots(raw: string | undefined, defaultCwd: string): string[] {
   if (raw?.trim()) {
     return raw
@@ -49,6 +59,7 @@ function resolveDefaultCwd(): string {
 }
 
 const defaultCwd = resolveDefaultCwd();
+const cloudRepos = parseCsv(process.env.CLOUD_REPOS);
 
 export const env = {
   port: Number(process.env.PORT || 3001),
@@ -66,8 +77,13 @@ export const env = {
   intentRouter: (process.env.INTENT_ROUTER || "llm") as "llm" | "rules",
   cursorApiKey: process.env.CURSOR_API_KEY?.trim() || "",
   agentModel: process.env.AGENT_MODEL || "composer-2.5",
+  devRuntime: (process.env.DEV_RUNTIME || "local") as "local" | "cloud",
   defaultCwd,
   allowedCwdRoots: parseAllowedCwdRoots(process.env.ALLOWED_CWD_ROOTS, defaultCwd),
+  cloudRepos,
+  cloudBaseBranch: process.env.CLOUD_BASE_BRANCH?.trim() || "main",
+  cloudAutoCreatePr: process.env.CLOUD_AUTO_CREATE_PR !== "false",
+  cloudSkipReviewerRequest: process.env.CLOUD_SKIP_REVIEWER_REQUEST !== "false",
   devBriefReply: process.env.DEV_BRIEF_REPLY !== "false",
   runTimeoutMs: Number(process.env.RUN_TIMEOUT_MS || 600000),
   telegramMode: (process.env.TELEGRAM_MODE || "polling") as "polling" | "webhook",
