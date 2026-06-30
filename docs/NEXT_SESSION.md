@@ -15,7 +15,7 @@
 |------|------|
 | `scrape` | 爬網頁 → OpenAI 摘要 → 直接回傳（不存筆記） |
 | `dev` | Cursor SDK local runtime（讀 `DEFAULT_CWD` 程式碼） |
-| `ops` | 主機/服務操作需求（目前先回安全提示） |
+| `ops` | 主機/服務操作（查健康、容器狀態、日誌、磁碟；寫入操作待 Phase 2） |
 | `chat` | OpenAI 閒聊 |
 
 技術棧：grammy + Express + SQLite + playwright-service + OpenAI + `@cursor/sdk`
@@ -42,6 +42,14 @@
 - [x] `scrape` 改為「只分析回傳，不落地筆記」
 - [x] n8n scrape 回應契約改為至少回傳 `summary`（`sourceUrl/title` 選填）
 - [x] rules fallback 補回舊關鍵字（`存/保存/筆記`）避免誤判
+
+### 進行中（ops Phase 1，分支 `feat/ops-phase1-executor`）
+
+- [x] `opsPlanner`：自然語言 → 白名單 action
+- [x] `opsExecutor`：查詢型 action（`check_health`、`docker_ps`、`tail_logs`、`disk_usage`）
+- [x] `handleOps` 改為背景執行並回傳結果
+- [ ] infra 需補：`OPS_DOCKER_ENABLED` + docker socket 掛載（才能查容器/log）
+- [ ] Phase 2：高風險操作二次確認（restart/deploy）
 
 ### 穩定性修正（2026-06-23）
 

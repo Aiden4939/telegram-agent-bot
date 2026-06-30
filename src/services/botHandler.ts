@@ -19,9 +19,12 @@ import {
   clearScrapeBusy,
   isChatTaskLocked,
   isScrapeBusy,
+  isPendingOps,
   markPendingDev,
+  markPendingOps,
   markScrapeBusy,
   clearPendingDev,
+  clearPendingOps,
 } from "./chatTaskState.js";
 import {
   formatForceResetMessage,
@@ -31,6 +34,8 @@ import { extractUrl } from "./intentRouter.js";
 import { resolveIntent } from "./llmIntentRouter.js";
 import { chat } from "./llmClient.js";
 import { runScrapeNote } from "./scrapeNoteService.js";
+import { planOpsAction } from "./opsPlanner.js";
+import { executeOpsPlan, formatOpsResult } from "./opsExecutor.js";
 import { getCurrentCwd, resolveAllowedCwd } from "../utils/cwd.js";
 import {
   chunkMessage,
@@ -185,19 +190,52 @@ async function handleChat(ctx: Context, text: string): Promise<void> {
   })();
 }
 
-async function handleOps(ctx: Context): Promise<void> {
+async function handleOps(ctx: Context, text: string): Promise<void> {
   const chatId = ctx.chat?.id;
   if (!chatId) {
     return;
   }
 
-  await ctx.reply(
-    [
-      "已辨識為主機操作（ops）需求。",
-      "目前尚未啟用主機操作執行器，為避免誤操作，暫不自動執行指令。",
-      "請先使用既有 /status、/reset，或改以開發任務描述希望我調整的程式碼。"
-    ].join("\n")
-  );
+  if (isBusy(chatId)) {
+    await ctx.reply("目前有任務進行中，請稍候或使用 /cancel、/reset。");
+    return;
+  }
+
+  if (!env.opsEnabled) {
+    await ctx.reply("ops 執行器未啟用（OPS_ENABLED=false）。");
+    return;
+  }
+
+  markPendingOps(chatId);
+  const statusMsg = await ctx.reply("主機操作處理中…");
+
+  void (async () => {
+    try {
+      const plan = await planOpsAction(text);
+      const result = await executeOpsPlan(plan);
+      try {
+        await replyInChunks(
+          ctx,
+          chatId,
+          statusMsg.message_id,
+          formatOpsResult(result)
+        );
+      } catch (replyError) {
+        const message =
+          replyError instanceof Error ? replyError.message : String(replyError);
+        await ctx.reply(`主機操作完成，但回覆失敗：${message}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await ctx.api.editMessageText(
+        chatId,
+        statusMsg.message_id,
+        `主機操作失敗：${message}`
+      );
+    } finally {
+      clearPendingOps(chatId);
+    }
+  })();
 }
 
 export function createBot(): Bot {
@@ -235,6 +273,9 @@ export function createBot(): Bot {
         `開發執行：${env.devRuntime}`,
         `開發 cwd：${getCurrentCwd(String(chatId))}`,
         `Cloud repos：${env.cloudRepos.join(",") || "（未設定）"}`,
+        `Ops 執行器：${env.opsEnabled ? "開啟" : "關閉"}`,
+        `Ops docker：${env.opsDockerEnabled ? "開啟" : "關閉"}`,
+        `Ops 容器白名單：${env.opsAllowedContainers.join(",") || "（未設定）"}`,
         `Agent session：${session?.agentId || "（無）"}`,
         `Cursor SDK：${env.cursorApiKey ? "已設定" : "未設定"}`,
         `簡短 dev 回覆：${env.devBriefReply ? "開啟" : "關閉"}`,
@@ -312,6 +353,14 @@ export function createBot(): Bot {
       return;
     }
 
+    if (isPendingOps(chatId)) {
+      clearPendingOps(chatId);
+      await ctx.reply(
+        "已解除 ops 忙碌狀態。背景請求可能仍在執行，完成後不會再更新訊息。卡死時請用 /reset。"
+      );
+      return;
+    }
+
     await ctx.reply("目前沒有可取消的開發任務。若狀態異常請用 /reset。");
   });
 
@@ -350,7 +399,7 @@ export function createBot(): Bot {
     }
 
     if (routed.intent === "ops") {
-      await handleOps(ctx);
+      await handleOps(ctx, text);
       return;
     }
 

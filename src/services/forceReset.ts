@@ -7,6 +7,7 @@ import { clearChatTaskLocks } from "./chatTaskState.js";
 export interface ForceResetReport extends ForceResetDevResult {
   scrapeLockCleared: boolean;
   devLockCleared: boolean;
+  opsLockCleared: boolean;
 }
 
 export async function performForceReset(
@@ -40,6 +41,10 @@ export function formatForceResetMessage(report: ForceResetReport): string {
     lines.push("• 已清除 dev pending 鎖");
   }
 
+  if (report.opsLockCleared) {
+    lines.push("• 已清除 ops pending 鎖");
+  }
+
   if (report.sessionReset) {
     const from = report.previousSessionStatus ?? "unknown";
     lines.push(`• session：${from} → idle（已清除 agent_id）`);
@@ -54,6 +59,7 @@ export function formatForceResetMessage(report: ForceResetReport): string {
 
   const mayNeedRestart =
     report.scrapeLockCleared ||
+    report.opsLockCleared ||
     (report.hadActiveRun && !report.devRunCancelled);
   if (mayNeedRestart) {
     lines.push("若仍無回應，請 SSH：docker compose restart telegram-bot");

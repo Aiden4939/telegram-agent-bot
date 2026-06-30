@@ -29,17 +29,24 @@ async function resetDb(): Promise<void> {
 }
 
 test("clearChatTaskLocks removes scrape and dev pending locks", async () => {
-  const { markScrapeBusy, markPendingDev, isChatTaskLocked, clearChatTaskLocks } =
-    await import("./chatTaskState.js");
+  const {
+    markScrapeBusy,
+    markPendingDev,
+    markPendingOps,
+    isChatTaskLocked,
+    clearChatTaskLocks,
+  } = await import("./chatTaskState.js");
 
   const chatId = 42;
   markScrapeBusy(chatId);
   markPendingDev(chatId);
+  markPendingOps(chatId);
   assert.equal(isChatTaskLocked(chatId), true);
 
   const result = clearChatTaskLocks(chatId);
   assert.equal(result.scrapeLockCleared, true);
   assert.equal(result.devLockCleared, true);
+  assert.equal(result.opsLockCleared, true);
   assert.equal(isChatTaskLocked(chatId), false);
 });
 
@@ -49,6 +56,7 @@ test("clearChatTaskLocks is idempotent when no locks exist", async () => {
   const result = clearChatTaskLocks(999);
   assert.equal(result.scrapeLockCleared, false);
   assert.equal(result.devLockCleared, false);
+  assert.equal(result.opsLockCleared, false);
 });
 
 test("formatForceResetMessage describes session recovery", async () => {
@@ -61,6 +69,7 @@ test("formatForceResetMessage describes session recovery", async () => {
     previousSessionStatus: "running",
     scrapeLockCleared: false,
     devLockCleared: true,
+    opsLockCleared: false,
   });
 
   assert.match(message, /session：running → idle/);
@@ -78,6 +87,7 @@ test("formatForceResetMessage suggests container restart when scrape lock cleare
     previousSessionStatus: "idle",
     scrapeLockCleared: true,
     devLockCleared: false,
+    opsLockCleared: false,
   });
 
   assert.match(message, /docker compose restart telegram-bot/);

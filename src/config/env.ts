@@ -60,17 +60,43 @@ function resolveDefaultCwd(): string {
 
 const defaultCwd = resolveDefaultCwd();
 const cloudRepos = parseCsv(process.env.CLOUD_REPOS);
+const port = Number(process.env.PORT || 3001);
+const playwrightServiceUrl =
+  process.env.PLAYWRIGHT_SERVICE_URL || "http://127.0.0.1:3100";
+
+function parsePositiveInt(
+  raw: string | undefined,
+  fallback: number,
+  max: number
+): number {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    return fallback;
+  }
+  return Math.min(Math.floor(value), max);
+}
+
+function resolveOpsHealthUrls(): string[] {
+  const configured = parseCsv(process.env.OPS_HEALTH_URLS);
+  if (configured.length > 0) {
+    return configured;
+  }
+
+  return [
+    `http://127.0.0.1:${port}/health`,
+    `${playwrightServiceUrl.replace(/\/$/, "")}/health`,
+  ];
+}
 
 export const env = {
-  port: Number(process.env.PORT || 3001),
+  port,
   telegramBotToken: requireEnv("TELEGRAM_BOT_TOKEN"),
   allowedUserIds: parseUserIds(requireEnv("ALLOWED_TELEGRAM_USER_IDS")),
   openaiApiKey: requireEnv("OPENAI_API_KEY"),
   llmModel: process.env.LLM_MODEL || "gpt-4o-mini",
   internalApiSecret: requireEnv("INTERNAL_API_SECRET"),
   sessionDbPath: process.env.SESSION_DB_PATH || "./data/bot.db",
-  playwrightServiceUrl:
-    process.env.PLAYWRIGHT_SERVICE_URL || "http://127.0.0.1:3100",
+  playwrightServiceUrl,
   scrapeMode: (process.env.SCRAPE_MODE || "inline") as "inline" | "n8n",
   n8nWebhookUrl: process.env.N8N_WEBHOOK_URL || "",
   scrapeTimeoutMs: Number(process.env.SCRAPE_TIMEOUT_MS || 120000),
@@ -89,4 +115,14 @@ export const env = {
   telegramMode: (process.env.TELEGRAM_MODE || "polling") as "polling" | "webhook",
   webhookPath: process.env.WEBHOOK_PATH || "/telegram/webhook",
   webhookUrl: process.env.WEBHOOK_URL?.trim() || "",
+  opsEnabled: process.env.OPS_ENABLED !== "false",
+  opsDockerEnabled: process.env.OPS_DOCKER_ENABLED === "true",
+  opsAllowedContainers: parseCsv(process.env.OPS_ALLOWED_CONTAINERS),
+  opsHealthUrls: resolveOpsHealthUrls(),
+  opsCommandTimeoutMs: parsePositiveInt(
+    process.env.OPS_COMMAND_TIMEOUT_MS,
+    30000,
+    120000
+  ),
+  opsLogTailLines: parsePositiveInt(process.env.OPS_LOG_TAIL_LINES, 50, 500),
 };

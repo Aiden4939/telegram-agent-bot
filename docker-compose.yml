@@ -16,8 +16,12 @@ services:
     environment:
       PLAYWRIGHT_SERVICE_URL: http://playwright-service:3100
       SESSION_DB_PATH: /app/data/bot.db
+      OPS_DOCKER_ENABLED: ${OPS_DOCKER_ENABLED:-false}
+      OPS_ALLOWED_CONTAINERS: ${OPS_ALLOWED_CONTAINERS:-telegram-agent-bot,playwright-service}
     volumes:
       - bot_data:/app/data
+      # 本機測試 docker ops 時取消註解：
+      # - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - playwright-service
     restart: unless-stopped
