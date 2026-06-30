@@ -8,7 +8,7 @@
 Telegram → telegram-agent-bot (grammy + Express)
               ├─ scrape → playwright-service → OpenAI（回傳分析）
               ├─ dev    → Cursor SDK（local 或 cloud runtime）
-              ├─ ops    → 主機操作意圖（目前僅安全提示）
+              ├─ ops    → opsExecutor（查詢型主機操作，白名單）
               └─ chat   → OpenAI
 ```
 
@@ -73,6 +73,29 @@ node ./node_modules/tsx/dist/cli.mjs watch src/index.ts
 幫我解釋 line-reminder-bot 的指令有哪些（請 5 條列點）
 ```
 
+```
+幫我看現在 docker 服務是否健康
+```
+
+## Ops 主機操作（Phase 1）
+
+自然語言觸發 `ops` 意圖後，會先由 `opsPlanner` 規劃，再由 `opsExecutor` 執行白名單查詢：
+
+| Action | 範例 |
+|--------|------|
+| `check_health` | 幫我看服務健康狀態 |
+| `docker_ps` | 幫我看 docker 容器狀態 |
+| `tail_logs` | 幫我看 telegram-agent-bot 最近 log |
+| `disk_usage` | 幫我看磁碟使用 |
+
+遠端部署若要啟用 `docker_ps` / `tail_logs`，需在 infra 設定：
+
+- `OPS_DOCKER_ENABLED=true`
+- 掛載 `/var/run/docker.sock`
+- `OPS_ALLOWED_CONTAINERS` 填實際 `container_name`（遠端 infra 通常為 `svc-telegram-bot` 等）
+
+本機 `docker-compose.yml` 預設容器名為 `telegram-agent-bot`、`playwright-service`。
+
 ## Docker 一鍵啟動
 
 ```bash
@@ -129,6 +152,10 @@ PORT=3001
 | `DEV_BRIEF_REPLY` | 開發任務自動加簡短回覆提示（預設 true） |
 | `INTENT_ROUTER` | `llm` 或 `rules` |
 | `SCRAPE_MODE` | `inline` 或 `n8n` |
+| `OPS_ENABLED` | 是否啟用 ops 執行器（預設 true） |
+| `OPS_DOCKER_ENABLED` | 是否允許 docker 查詢（需 socket + docker-cli） |
+| `OPS_ALLOWED_CONTAINERS` | 允許查狀態/log 的容器白名單 |
+| `OPS_HEALTH_URLS` | 健康檢查 URL（未設則用 bot + playwright） |
 
 ## n8n 模式（可選）
 

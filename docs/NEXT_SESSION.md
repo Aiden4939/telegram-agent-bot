@@ -45,10 +45,12 @@
 
 ### 進行中（ops Phase 1，分支 `feat/ops-phase1-executor`）
 
-- [x] `opsPlanner`：自然語言 → 白名單 action
+- [x] `opsPlanner`：自然語言 → 白名單 action（含 rules fallback 測試）
 - [x] `opsExecutor`：查詢型 action（`check_health`、`docker_ps`、`tail_logs`、`disk_usage`）
-- [x] `handleOps` 改為背景執行並回傳結果
-- [ ] infra 需補：`OPS_DOCKER_ENABLED` + docker socket 掛載（才能查容器/log）
+- [x] `handleOps` 背景執行、`/cancel` 可解除 ops busy
+- [x] Dockerfile 安裝 `docker-cli`
+- [x] `docker_ps` 強制白名單 + `--filter name=^/container$`
+- [ ] infra 需補：`OPS_DOCKER_ENABLED` + docker socket 掛載（遠端 `svc-*` 容器名）
 - [ ] Phase 2：高風險操作二次確認（restart/deploy）
 
 ### 穩定性修正（2026-06-23）
@@ -185,6 +187,8 @@ src/
   services/botHandler.ts        # 指令、訊息路由、webhook 逾時、背景任務
   services/agentOrchestrator.ts # Cursor SDK、session 狀態
   services/llmIntentRouter.ts   # 意圖分類
+  services/opsPlanner.ts        # ops 自然語言 → action
+  services/opsExecutor.ts         # ops 白名單執行器
   repositories/sessionRepository.ts  # session DB + recoverStaleSessions
   config/env.ts                 # 環境變數
   config/helpText.ts            # /help 文案
