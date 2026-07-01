@@ -125,4 +125,7 @@ export const env = {
     120000
   ),
   opsLogTailLines: parsePositiveInt(process.env.OPS_LOG_TAIL_LINES, 50, 500),
+  githubToken: process.env.GITHUB_TOKEN?.trim() || "",
+  githubAllowedRepos: parseCsv(process.env.GITHUB_ALLOWED_REPOS),
+  githubIssueLimit: parsePositiveInt(process.env.GITHUB_ISSUE_LIMIT, 10, 30),
 };

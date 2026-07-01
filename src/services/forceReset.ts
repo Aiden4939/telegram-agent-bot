@@ -8,6 +8,7 @@ export interface ForceResetReport extends ForceResetDevResult {
   scrapeLockCleared: boolean;
   devLockCleared: boolean;
   opsLockCleared: boolean;
+  githubLockCleared: boolean;
 }
 
 export async function performForceReset(
@@ -43,6 +44,10 @@ export function formatForceResetMessage(report: ForceResetReport): string {
 
   if (report.opsLockCleared) {
     lines.push("• 已清除 ops pending 鎖");
+  }
+
+  if (report.githubLockCleared) {
+    lines.push("• 已清除 GitHub pending 鎖");
   }
 
   if (report.sessionReset) {

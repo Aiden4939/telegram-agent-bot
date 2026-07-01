@@ -20,11 +20,14 @@ import {
   isChatTaskLocked,
   isScrapeBusy,
   isPendingOps,
+  isPendingGitHub,
   markPendingDev,
   markPendingOps,
+  markPendingGitHub,
   markScrapeBusy,
   clearPendingDev,
   clearPendingOps,
+  clearPendingGitHub,
 } from "./chatTaskState.js";
 import {
   formatForceResetMessage,
@@ -36,6 +39,8 @@ import { chat } from "./llmClient.js";
 import { runScrapeNote } from "./scrapeNoteService.js";
 import { planOpsAction } from "./opsPlanner.js";
 import { executeOpsPlan, formatOpsResult } from "./opsExecutor.js";
+import { planGitHubAction } from "./githubPlanner.js";
+import { executeGitHubPlan, formatGitHubResult } from "./githubExecutor.js";
 import { getCurrentCwd, resolveAllowedCwd } from "../utils/cwd.js";
 import {
   chunkMessage,
@@ -238,6 +243,49 @@ async function handleOps(ctx: Context, text: string): Promise<void> {
   })();
 }
 
+async function handleGitHub(ctx: Context, text: string): Promise<void> {
+  const chatId = ctx.chat?.id;
+  if (!chatId) {
+    return;
+  }
+
+  if (isBusy(chatId)) {
+    await ctx.reply("目前有任務進行中，請稍候或使用 /cancel、/reset。");
+    return;
+  }
+
+  markPendingGitHub(chatId);
+  const statusMsg = await ctx.reply("GitHub 查詢處理中…");
+
+  void (async () => {
+    try {
+      const plan = await planGitHubAction(text);
+      const result = await executeGitHubPlan(plan);
+      try {
+        await replyInChunks(
+          ctx,
+          chatId,
+          statusMsg.message_id,
+          formatGitHubResult(result)
+        );
+      } catch (replyError) {
+        const message =
+          replyError instanceof Error ? replyError.message : String(replyError);
+        await ctx.reply(`GitHub 查詢完成，但回覆失敗：${message}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await ctx.api.editMessageText(
+        chatId,
+        statusMsg.message_id,
+        `GitHub 查詢失敗：${message}`
+      );
+    } finally {
+      clearPendingGitHub(chatId);
+    }
+  })();
+}
+
 export function createBot(): Bot {
   const bot = new Bot(env.telegramBotToken);
 
@@ -276,6 +324,8 @@ export function createBot(): Bot {
         `Ops 執行器：${env.opsEnabled ? "開啟" : "關閉"}`,
         `Ops docker：${env.opsDockerEnabled ? "開啟" : "關閉"}`,
         `Ops 容器白名單：${env.opsAllowedContainers.join(",") || "（未設定）"}`,
+        `GitHub token：${env.githubToken ? "已設定" : "未設定"}`,
+        `GitHub repos：${env.githubAllowedRepos.join(",") || "（未設定）"}`,
         `Agent session：${session?.agentId || "（無）"}`,
         `Cursor SDK：${env.cursorApiKey ? "已設定" : "未設定"}`,
         `簡短 dev 回覆：${env.devBriefReply ? "開啟" : "關閉"}`,
@@ -361,6 +411,14 @@ export function createBot(): Bot {
       return;
     }
 
+    if (isPendingGitHub(chatId)) {
+      clearPendingGitHub(chatId);
+      await ctx.reply(
+        "已解除 GitHub 查詢忙碌狀態。背景請求可能仍在執行，完成後不會再更新訊息。卡死時請用 /reset。"
+      );
+      return;
+    }
+
     await ctx.reply("目前沒有可取消的開發任務。若狀態異常請用 /reset。");
   });
 
@@ -400,6 +458,11 @@ export function createBot(): Bot {
 
     if (routed.intent === "ops") {
       await handleOps(ctx, text);
+      return;
+    }
+
+    if (routed.intent === "github") {
+      await handleGitHub(ctx, text);
       return;
     }
 

@@ -8,7 +8,8 @@
 Telegram → telegram-agent-bot (grammy + Express)
               ├─ scrape → playwright-service → OpenAI（回傳分析）
               ├─ dev    → Cursor SDK（local 或 cloud runtime）
-              ├─ ops    → opsExecutor（查詢型主機操作，白名單）
+              ├─ ops    → opsExecutor（HTTP health；Docker 查詢預設停用）
+              ├─ github → GitHub API（issues / PR 唯讀）
               └─ chat   → OpenAI
 ```
 
@@ -154,6 +155,9 @@ PORT=3001
 | `OPS_DOCKER_ENABLED` | 是否允許 docker 查詢（預設 false；Production 應保持 false） |
 | `OPS_ALLOWED_CONTAINERS` | 允許查狀態/log 的容器白名單 |
 | `OPS_HEALTH_URLS` | 健康檢查 URL（未設則用 bot + playwright） |
+| `GITHUB_TOKEN` | GitHub read-only PAT（查詢 issues/PR） |
+| `GITHUB_ALLOWED_REPOS` | 允許查詢的 repo（`owner/repo`，逗號分隔） |
+| `GITHUB_ISSUE_LIMIT` | 單次回傳最多幾筆 issues/PR（預設 10，上限 30） |
 
 ## n8n 模式（可選）
 

@@ -1,6 +1,7 @@
 const busyScrapeChats = new Set<number>();
 const pendingDevChats = new Set<number>();
 const pendingOpsChats = new Set<number>();
+const pendingGitHubChats = new Set<number>();
 
 export function isScrapeBusy(chatId: number): boolean {
   return busyScrapeChats.has(chatId);
@@ -38,11 +39,24 @@ export function clearPendingOps(chatId: number): void {
   pendingOpsChats.delete(chatId);
 }
 
+export function isPendingGitHub(chatId: number): boolean {
+  return pendingGitHubChats.has(chatId);
+}
+
+export function markPendingGitHub(chatId: number): void {
+  pendingGitHubChats.add(chatId);
+}
+
+export function clearPendingGitHub(chatId: number): void {
+  pendingGitHubChats.delete(chatId);
+}
+
 export function isChatTaskLocked(chatId: number): boolean {
   return (
     busyScrapeChats.has(chatId) ||
     pendingDevChats.has(chatId) ||
-    pendingOpsChats.has(chatId)
+    pendingOpsChats.has(chatId) ||
+    pendingGitHubChats.has(chatId)
   );
 }
 
@@ -50,10 +64,12 @@ export function clearChatTaskLocks(chatId: number): {
   scrapeLockCleared: boolean;
   devLockCleared: boolean;
   opsLockCleared: boolean;
+  githubLockCleared: boolean;
 } {
   return {
     scrapeLockCleared: busyScrapeChats.delete(chatId),
     devLockCleared: pendingDevChats.delete(chatId),
     opsLockCleared: pendingOpsChats.delete(chatId),
+    githubLockCleared: pendingGitHubChats.delete(chatId),
   };
 }

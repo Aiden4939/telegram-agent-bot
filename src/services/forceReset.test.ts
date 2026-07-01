@@ -57,6 +57,7 @@ test("clearChatTaskLocks is idempotent when no locks exist", async () => {
   assert.equal(result.scrapeLockCleared, false);
   assert.equal(result.devLockCleared, false);
   assert.equal(result.opsLockCleared, false);
+  assert.equal(result.githubLockCleared, false);
 });
 
 test("formatForceResetMessage describes session recovery", async () => {
@@ -70,6 +71,7 @@ test("formatForceResetMessage describes session recovery", async () => {
     scrapeLockCleared: false,
     devLockCleared: true,
     opsLockCleared: false,
+    githubLockCleared: false,
   });
 
   assert.match(message, /session：running → idle/);
@@ -88,6 +90,7 @@ test("formatForceResetMessage suggests container restart when scrape lock cleare
     scrapeLockCleared: true,
     devLockCleared: false,
     opsLockCleared: false,
+    githubLockCleared: false,
   });
 
   assert.match(message, /docker compose restart telegram-bot/);
