@@ -1,4 +1,4 @@
-import { Bot, type Context } from "grammy";
+import { Bot, InlineKeyboard, type Context } from "grammy";
 import { webhookCallback } from "grammy";
 import type { Application } from "express";
 import path from "node:path";
@@ -41,11 +41,28 @@ import { planOpsAction } from "./opsPlanner.js";
 import { executeOpsPlan, formatOpsResult } from "./opsExecutor.js";
 import { planGitHubAction } from "./githubPlanner.js";
 import { executeGitHubPlan, formatGitHubResult } from "./githubExecutor.js";
+import {
+  approveAndRunDevTask,
+  cancelTask,
+  createDevTask,
+  getRecoverableTaskChoices,
+  pauseTask,
+  rejectDevTask,
+} from "./devTaskWorkflow.js";
 import { getCurrentCwd, resolveAllowedCwd } from "../utils/cwd.js";
 import {
   chunkMessage,
   plainTextForTelegram,
 } from "../utils/messageChunk.js";
+import {
+  markTelegramUpdateDuplicate,
+  markTelegramUpdateFailed,
+  markTelegramUpdateProcessed,
+  registerTelegramUpdate,
+} from "../repositories/updateRepository.js";
+import { getLatestTaskByChat } from "../repositories/taskRepository.js";
+import { checkAndTrackUserMessage } from "./rateLimitService.js";
+import { redactSecrets } from "./redaction.js";
 
 function isAllowed(userId: number | undefined): userId is number {
   if (!userId) {
@@ -293,7 +310,34 @@ export function createBot(): Bot {
     if (!isAllowed(ctx.from?.id)) {
       return;
     }
-    await next();
+    const messageRate = checkAndTrackUserMessage(String(ctx.from?.id));
+    if (!messageRate.ok) {
+      await ctx.reply(
+        `訊息過於頻繁，請 ${messageRate.retryAfterSec ?? 10} 秒後再試。`
+      );
+      return;
+    }
+    const updateId = String(ctx.update.update_id);
+    const chatId = String(ctx.chat?.id ?? "");
+    const userId = String(ctx.from?.id ?? "");
+    const messageId = ctx.msg?.message_id ? String(ctx.msg.message_id) : null;
+    const { inserted } = registerTelegramUpdate({
+      updateId,
+      chatId,
+      userId,
+      messageId,
+    });
+    if (!inserted) {
+      markTelegramUpdateDuplicate(updateId);
+      return;
+    }
+    try {
+      await next();
+      markTelegramUpdateProcessed(updateId);
+    } catch (error) {
+      markTelegramUpdateFailed(updateId, "handler_error");
+      throw error;
+    }
   });
 
   bot.command("start", async (ctx) => {
@@ -312,6 +356,7 @@ export function createBot(): Bot {
 
     const session = getSession(String(chatId));
     const busy = isBusy(chatId);
+    const latestTask = getLatestTaskByChat(String(chatId));
 
     await ctx.reply(
       [
@@ -327,6 +372,11 @@ export function createBot(): Bot {
         `GitHub token：${env.githubToken ? "已設定" : "未設定"}`,
         `GitHub repos：${env.githubAllowedRepos.join(",") || "（未設定）"}`,
         `Agent session：${session?.agentId || "（無）"}`,
+        `Task：${latestTask?.taskId || "（無）"}`,
+        `Task 狀態：${latestTask?.status || "（無）"}`,
+        `Task repo：${latestTask?.repository || "（無）"}`,
+        `Task PR：${latestTask?.pullRequestUrl || "（無）"}`,
+        `Task 成本(估)：${latestTask?.estimatedCost ?? 0}`,
         `Cursor SDK：${env.cursorApiKey ? "已設定" : "未設定"}`,
         `簡短 dev 回覆：${env.devBriefReply ? "開啟" : "關閉"}`,
         `狀態：${busy ? "處理中" : "閒置"}`,
@@ -386,6 +436,46 @@ export function createBot(): Bot {
     await ctx.reply("已開啟新的開發 Agent session。");
   });
 
+  bot.command("dev", async (ctx) => {
+    const chatId = ctx.chat?.id;
+    const fromId = ctx.from?.id;
+    if (!chatId || !fromId || !ctx.message?.text) {
+      return;
+    }
+    const raw = ctx.message.text.replace(/^\/dev(@\w+)?\s*/i, "").trim();
+    if (!raw) {
+      await ctx.reply("請在 /dev 後描述需求，例如：/dev 修正登入錯誤");
+      return;
+    }
+
+    try {
+      const { task, planLines, approvalToken } = createDevTask({
+        chatId: String(chatId),
+        userId: String(fromId),
+        updateId: String(ctx.update.update_id),
+        messageId: String(ctx.message.message_id),
+        text: raw,
+      });
+      const keyboard = new InlineKeyboard()
+        .text("確認執行", `approve:${task.taskId}:${approvalToken}`)
+        .text("取消", `reject:${task.taskId}:${approvalToken}`);
+      await ctx.reply(
+        [
+          `Task ID：${task.taskId}`,
+          `Repo：${task.repository ?? "（未指定）"}`,
+          `狀態：${task.status}`,
+          "",
+          "執行計畫：",
+          ...planLines.map((line, i) => `${i + 1}. ${line}`),
+        ].join("\n"),
+        { reply_markup: keyboard }
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await ctx.reply(`無法建立 dev 任務：${redactSecrets(message)}`);
+    }
+  });
+
   bot.command("cancel", async (ctx) => {
     const chatId = ctx.chat?.id;
     if (!chatId) {
@@ -400,6 +490,12 @@ export function createBot(): Bot {
 
     if (cancelled) {
       await ctx.reply("已取消進行中的開發任務。");
+      return;
+    }
+    const recoverable = getRecoverableTaskChoices(String(chatId));
+    if (recoverable.length > 0) {
+      const cancelledTask = cancelTask(recoverable[0].taskId, String(ctx.from?.id ?? ""));
+      await ctx.reply(`已取消 Task ${cancelledTask.taskId}。`);
       return;
     }
 
@@ -422,6 +518,21 @@ export function createBot(): Bot {
     await ctx.reply("目前沒有可取消的開發任務。若狀態異常請用 /reset。");
   });
 
+  bot.command("pause", async (ctx) => {
+    const chatId = ctx.chat?.id;
+    const fromId = ctx.from?.id;
+    if (!chatId || !fromId) {
+      return;
+    }
+    const recoverable = getRecoverableTaskChoices(String(chatId));
+    if (recoverable.length === 0) {
+      await ctx.reply("目前沒有可暫停的 task。");
+      return;
+    }
+    const paused = pauseTask(recoverable[0].taskId, String(fromId));
+    await ctx.reply(`已暫停 Task ${paused.taskId}。`);
+  });
+
   bot.command("reset", async (ctx) => {
     const chatId = ctx.chat?.id;
     if (!chatId) {
@@ -436,6 +547,27 @@ export function createBot(): Bot {
     const text = ctx.message.text.trim();
 
     if (text.startsWith("/")) {
+      return;
+    }
+
+    if (/^繼續$/.test(text)) {
+      const candidates = getRecoverableTaskChoices(String(ctx.chat?.id ?? ""));
+      if (candidates.length === 0) {
+        await ctx.reply("目前沒有可恢復的 task。");
+        return;
+      }
+      if (candidates.length > 1) {
+        await ctx.reply(
+          [
+            "找到多個可恢復 task，請改用 /dev 指定新需求，或先 /status 查看目前 task：",
+            ...candidates.map((t) => `- ${t.taskId} (${t.status}) ${t.repository ?? ""}`),
+          ].join("\n")
+        );
+        return;
+      }
+      await ctx.reply(
+        `已找到可恢復 Task ${candidates[0].taskId}（${candidates[0].status}），請用 /dev 補充下一步需求。`
+      );
       return;
     }
 
@@ -467,6 +599,59 @@ export function createBot(): Bot {
     }
 
     await handleChat(ctx, text);
+  });
+
+  bot.on("callback_query:data", async (ctx) => {
+    const fromId = String(ctx.from?.id ?? "");
+    const data = ctx.callbackQuery.data ?? "";
+    const parts = data.split(":");
+    if (parts.length !== 3) {
+      await ctx.answerCallbackQuery({ text: "無效操作", show_alert: true });
+      return;
+    }
+    const [action, taskId, token] = parts;
+    try {
+      if (action === "approve") {
+        await ctx.answerCallbackQuery({ text: "已確認，開始執行。" });
+        await ctx.editMessageReplyMarkup({ reply_markup: undefined });
+        const status = await ctx.reply(`Task ${taskId} 執行中…`);
+        try {
+          const result = await approveAndRunDevTask({
+            taskId,
+            approvalToken: token,
+            userId: fromId,
+          });
+          await ctx.api.editMessageText(
+            ctx.chat!.id,
+            status.message_id,
+            [
+              `Task ${result.taskId} 進度更新：${result.status}`,
+              `Repo：${result.repository ?? "（未指定）"}`,
+              `Branch：${result.workingBranch ?? "（未指定）"}`,
+              `PR：${result.pullRequestUrl ?? "（尚未建立）"}`,
+              `成本估算：${result.estimatedCost}`,
+            ].join("\n")
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await ctx.api.editMessageText(
+            ctx.chat!.id,
+            status.message_id,
+            `Task ${taskId} 執行失敗：${redactSecrets(message)}`
+          );
+        }
+      } else if (action === "reject") {
+        rejectDevTask(taskId, fromId);
+        await ctx.answerCallbackQuery({ text: "已取消。" });
+        await ctx.editMessageReplyMarkup({ reply_markup: undefined });
+        await ctx.reply(`Task ${taskId} 已取消。`);
+      } else {
+        await ctx.answerCallbackQuery({ text: "未知操作", show_alert: true });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await ctx.answerCallbackQuery({ text: redactSecrets(message), show_alert: true });
+    }
   });
 
   bot.catch((error) => {
