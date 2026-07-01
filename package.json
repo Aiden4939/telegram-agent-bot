@@ -16,7 +16,8 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "grammy": "^1.35.0",
-    "openai": "^4.77.0"
+    "openai": "^4.77.0",
+    "taishin-sdk": "file:vendor/taishin-sdk-1.0.2.tgz"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",

@@ -3,7 +3,7 @@ import { env } from "../config/env.js";
 import type { Intent, IntentResult } from "../types/intent.js";
 import { classifyIntentByRules, extractUrl } from "./intentRouter.js";
 
-const VALID_INTENTS: Intent[] = ["scrape", "dev", "ops", "chat"];
+const VALID_INTENTS: Intent[] = ["scrape", "dev", "ops", "securities", "chat"];
 
 function parseIntentJson(raw: string): IntentResult | null {
   try {
@@ -32,12 +32,13 @@ export async function classifyIntentWithLlm(
         role: "system",
         content: [
           "你是意圖分類器。分析使用者訊息，只回傳 JSON：",
-          '{"intent":"scrape|dev|ops|chat","url":"可選，scrape 時若有網址必填"}',
+          '{"intent":"scrape|dev|ops|securities|chat","url":"可選，scrape 時若有網址必填"}',
           "",
           "分類規則：",
           "- scrape：抓取網頁並分析/整理內容（不存筆記）",
           "- dev：程式開發、改 code、解釋 repo、除錯、refactor、加功能",
           "- ops：主機/服務操作（例如重啟服務、看 docker 狀態、改主機設定、查即時監控）",
+          "- securities：台新證券持股查詢（例如目前持有哪些股票、某檔持股多少、損益概況）",
           "- chat：一般問答、閒聊、與開發無關的問題",
         ].join("\n"),
       },

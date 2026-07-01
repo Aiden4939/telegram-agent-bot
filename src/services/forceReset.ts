@@ -3,11 +3,13 @@ import {
   type ForceResetDevResult,
 } from "./agentOrchestrator.js";
 import { clearChatTaskLocks } from "./chatTaskState.js";
+import { resetTaishinSdkSession } from "./taishinSecuritiesService.js";
 
 export interface ForceResetReport extends ForceResetDevResult {
   scrapeLockCleared: boolean;
   devLockCleared: boolean;
   opsLockCleared: boolean;
+  securitiesLockCleared: boolean;
 }
 
 export async function performForceReset(
@@ -15,6 +17,7 @@ export async function performForceReset(
 ): Promise<ForceResetReport> {
   const devResult = await forceResetDev(chatId);
   const lockResult = clearChatTaskLocks(Number(chatId));
+  resetTaishinSdkSession();
 
   return {
     ...devResult,
@@ -45,6 +48,10 @@ export function formatForceResetMessage(report: ForceResetReport): string {
     lines.push("• 已清除 ops pending 鎖");
   }
 
+  if (report.securitiesLockCleared) {
+    lines.push("• 已清除證券查詢 pending 鎖");
+  }
+
   if (report.sessionReset) {
     const from = report.previousSessionStatus ?? "unknown";
     lines.push(`• session：${from} → idle（已清除 agent_id）`);
@@ -60,6 +67,7 @@ export function formatForceResetMessage(report: ForceResetReport): string {
   const mayNeedRestart =
     report.scrapeLockCleared ||
     report.opsLockCleared ||
+    report.securitiesLockCleared ||
     (report.hadActiveRun && !report.devRunCancelled);
   if (mayNeedRestart) {
     lines.push("若仍無回應，請 SSH：docker compose restart telegram-bot");

@@ -47,6 +47,23 @@ test("clearChatTaskLocks removes scrape and dev pending locks", async () => {
   assert.equal(result.scrapeLockCleared, true);
   assert.equal(result.devLockCleared, true);
   assert.equal(result.opsLockCleared, true);
+  assert.equal(result.securitiesLockCleared, false);
+  assert.equal(isChatTaskLocked(chatId), false);
+});
+
+test("clearChatTaskLocks removes securities pending lock", async () => {
+  const {
+    markPendingSecurities,
+    isChatTaskLocked,
+    clearChatTaskLocks,
+  } = await import("./chatTaskState.js");
+
+  const chatId = 77;
+  markPendingSecurities(chatId);
+  assert.equal(isChatTaskLocked(chatId), true);
+
+  const result = clearChatTaskLocks(chatId);
+  assert.equal(result.securitiesLockCleared, true);
   assert.equal(isChatTaskLocked(chatId), false);
 });
 
@@ -57,6 +74,7 @@ test("clearChatTaskLocks is idempotent when no locks exist", async () => {
   assert.equal(result.scrapeLockCleared, false);
   assert.equal(result.devLockCleared, false);
   assert.equal(result.opsLockCleared, false);
+  assert.equal(result.securitiesLockCleared, false);
 });
 
 test("formatForceResetMessage describes session recovery", async () => {
@@ -70,6 +88,7 @@ test("formatForceResetMessage describes session recovery", async () => {
     scrapeLockCleared: false,
     devLockCleared: true,
     opsLockCleared: false,
+    securitiesLockCleared: false,
   });
 
   assert.match(message, /session：running → idle/);
@@ -88,6 +107,7 @@ test("formatForceResetMessage suggests container restart when scrape lock cleare
     scrapeLockCleared: true,
     devLockCleared: false,
     opsLockCleared: false,
+    securitiesLockCleared: false,
   });
 
   assert.match(message, /docker compose restart telegram-bot/);

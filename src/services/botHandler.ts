@@ -20,11 +20,14 @@ import {
   isChatTaskLocked,
   isScrapeBusy,
   isPendingOps,
+  isPendingSecurities,
   markPendingDev,
   markPendingOps,
+  markPendingSecurities,
   markScrapeBusy,
   clearPendingDev,
   clearPendingOps,
+  clearPendingSecurities,
 } from "./chatTaskState.js";
 import {
   formatForceResetMessage,
@@ -36,6 +39,12 @@ import { chat } from "./llmClient.js";
 import { runScrapeNote } from "./scrapeNoteService.js";
 import { planOpsAction } from "./opsPlanner.js";
 import { executeOpsPlan, formatOpsResult } from "./opsExecutor.js";
+import { formatPortfolioReply } from "./securitiesReplyFormatter.js";
+import {
+  isTaishinSecuritiesEnabled,
+  queryPortfolioSnapshot,
+  SecuritiesServiceError,
+} from "./taishinSecuritiesService.js";
 import { getCurrentCwd, resolveAllowedCwd } from "../utils/cwd.js";
 import {
   chunkMessage,
@@ -190,6 +199,54 @@ async function handleChat(ctx: Context, text: string): Promise<void> {
   })();
 }
 
+async function handleSecurities(ctx: Context, text: string): Promise<void> {
+  const chatId = ctx.chat?.id;
+  if (!chatId) {
+    return;
+  }
+
+  if (isBusy(chatId)) {
+    await ctx.reply("目前有任務進行中，請稍候或使用 /cancel、/reset。");
+    return;
+  }
+
+  if (!isTaishinSecuritiesEnabled()) {
+    await ctx.reply(
+      "台新證券查詢尚未啟用。請設定 TAISHIN_ENABLED=true 並補齊憑證環境變數，且安裝 taishin-sdk。"
+    );
+    return;
+  }
+
+  markPendingSecurities(chatId);
+  const statusMsg = await ctx.reply("查詢持股中…");
+
+  void (async () => {
+    try {
+      const snapshot = await queryPortfolioSnapshot();
+      await replyInChunks(
+        ctx,
+        chatId,
+        statusMsg.message_id,
+        formatPortfolioReply(snapshot, text)
+      );
+    } catch (error) {
+      const message =
+        error instanceof SecuritiesServiceError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : String(error);
+      await ctx.api.editMessageText(
+        chatId,
+        statusMsg.message_id,
+        `持股查詢失敗：${message}`
+      );
+    } finally {
+      clearPendingSecurities(chatId);
+    }
+  })();
+}
+
 async function handleOps(ctx: Context, text: string): Promise<void> {
   const chatId = ctx.chat?.id;
   if (!chatId) {
@@ -276,6 +333,7 @@ export function createBot(): Bot {
         `Ops 執行器：${env.opsEnabled ? "開啟" : "關閉"}`,
         `Ops docker：${env.opsDockerEnabled ? "開啟" : "關閉"}`,
         `Ops 容器白名單：${env.opsAllowedContainers.join(",") || "（未設定）"}`,
+        `台新證券查詢：${isTaishinSecuritiesEnabled() ? "開啟" : "關閉"}`,
         `Agent session：${session?.agentId || "（無）"}`,
         `Cursor SDK：${env.cursorApiKey ? "已設定" : "未設定"}`,
         `簡短 dev 回覆：${env.devBriefReply ? "開啟" : "關閉"}`,
@@ -361,6 +419,14 @@ export function createBot(): Bot {
       return;
     }
 
+    if (isPendingSecurities(chatId)) {
+      clearPendingSecurities(chatId);
+      await ctx.reply(
+        "已解除證券查詢忙碌狀態。背景請求可能仍在執行，完成後不會再更新訊息。卡死時請用 /reset。"
+      );
+      return;
+    }
+
     await ctx.reply("目前沒有可取消的開發任務。若狀態異常請用 /reset。");
   });
 
@@ -400,6 +466,11 @@ export function createBot(): Bot {
 
     if (routed.intent === "ops") {
       await handleOps(ctx, text);
+      return;
+    }
+
+    if (routed.intent === "securities") {
+      await handleSecurities(ctx, text);
       return;
     }
 

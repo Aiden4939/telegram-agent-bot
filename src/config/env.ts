@@ -125,4 +125,16 @@ export const env = {
     120000
   ),
   opsLogTailLines: parsePositiveInt(process.env.OPS_LOG_TAIL_LINES, 50, 500),
+  taishinEnabled: process.env.TAISHIN_ENABLED === "true",
+  taishinNationalId: process.env.TAISHIN_NATIONAL_ID?.trim() || "",
+  taishinPassword: process.env.TAISHIN_PASSWORD?.trim() || "",
+  taishinCertPath: process.env.TAISHIN_CERT_PATH?.trim() || "",
+  taishinCertPassword: process.env.TAISHIN_CERT_PASSWORD?.trim() || "",
+  taishinAccountId: process.env.TAISHIN_ACCOUNT_ID?.trim() || "",
+  taishinConfigured: Boolean(
+    process.env.TAISHIN_NATIONAL_ID?.trim() &&
+      process.env.TAISHIN_PASSWORD?.trim() &&
+      process.env.TAISHIN_CERT_PATH?.trim() &&
+      process.env.TAISHIN_CERT_PASSWORD?.trim()
+  ),
 };

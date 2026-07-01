@@ -1,4 +1,4 @@
-export type Intent = "scrape" | "dev" | "ops" | "chat";
+export type Intent = "scrape" | "dev" | "ops" | "securities" | "chat";
 
 export interface IntentResult {
   intent: Intent;

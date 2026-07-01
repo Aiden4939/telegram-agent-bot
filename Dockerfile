@@ -7,6 +7,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
+COPY vendor ./vendor
 RUN npm ci
 
 COPY tsconfig.json ./
@@ -22,6 +23,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
+COPY vendor ./vendor
 RUN npm ci --omit=dev && npm rebuild better-sqlite3
 
 COPY --from=builder /app/dist ./dist
