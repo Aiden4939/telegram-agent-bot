@@ -5,6 +5,7 @@ import { ensureSchema } from "./db/schema.js";
 import { closeDb } from "./db/database.js";
 import { recoverStaleSessions } from "./repositories/sessionRepository.js";
 import { createBot, startBot } from "./services/botHandler.js";
+import { recoverStaleTasks } from "./services/taskRecovery.js";
 
 async function main(): Promise<void> {
   assertProductionRuntimeGuards();
@@ -13,6 +14,10 @@ async function main(): Promise<void> {
   const recovered = recoverStaleSessions();
   if (recovered > 0) {
     console.warn(`[session] Recovered ${recovered} stale running session(s)`);
+  }
+  const recoveredTasks = recoverStaleTasks();
+  if (recoveredTasks > 0) {
+    console.warn(`[task] Recovered ${recoveredTasks} stale running task(s)`);
   }
 
   const app = createApp();

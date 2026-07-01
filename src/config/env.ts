@@ -128,4 +128,40 @@ export const env = {
   githubToken: process.env.GITHUB_TOKEN?.trim() || "",
   githubAllowedRepos: parseCsv(process.env.GITHUB_ALLOWED_REPOS),
   githubIssueLimit: parsePositiveInt(process.env.GITHUB_ISSUE_LIMIT, 10, 30),
+  taskMaxModelCalls: parsePositiveInt(process.env.TASK_MAX_MODEL_CALLS, 30, 1000),
+  taskMaxToolCalls: parsePositiveInt(process.env.TASK_MAX_TOOL_CALLS, 80, 5000),
+  taskMaxRuntimeMs: parsePositiveInt(process.env.TASK_MAX_RUNTIME_MS, 900000, 86_400_000),
+  taskMaxEstimatedCost: Number(process.env.TASK_MAX_ESTIMATED_COST || 5),
+  dailyMaxEstimatedCost: Number(process.env.DAILY_MAX_ESTIMATED_COST || 50),
+  monthlyMaxEstimatedCost: Number(process.env.MONTHLY_MAX_ESTIMATED_COST || 500),
+  logMaxLines: parsePositiveInt(process.env.LOG_MAX_LINES, 80, 1000),
+  logMaxBytes: parsePositiveInt(process.env.LOG_MAX_BYTES, 12000, 2_000_000),
+  taskApprovalTtlMs: parsePositiveInt(process.env.TASK_APPROVAL_TTL_MS, 900000, 86_400_000),
+  toolCallTimeoutMs: parsePositiveInt(process.env.TOOL_CALL_TIMEOUT_MS, 120000, 3_600_000),
+  modelCallTimeoutMs: parsePositiveInt(process.env.MODEL_CALL_TIMEOUT_MS, 120000, 3_600_000),
+  taskHeartbeatTimeoutMs: parsePositiveInt(
+    process.env.TASK_HEARTBEAT_TIMEOUT_MS,
+    300000,
+    86_400_000
+  ),
+  userMessagePerMinuteLimit: parsePositiveInt(
+    process.env.USER_MESSAGE_PER_MINUTE_LIMIT,
+    15,
+    200
+  ),
+  userConcurrentDevTaskLimit: parsePositiveInt(
+    process.env.USER_CONCURRENT_DEV_TASK_LIMIT,
+    1,
+    10
+  ),
+  globalConcurrentAgentLimit: parsePositiveInt(
+    process.env.GLOBAL_CONCURRENT_AGENT_LIMIT,
+    3,
+    50
+  ),
+  minAgentStartIntervalMs: parsePositiveInt(
+    process.env.MIN_AGENT_START_INTERVAL_MS,
+    60000,
+    3_600_000
+  ),
 };
