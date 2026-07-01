@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { env } from "../config/env.js";
 import type { OpsPlan, OpsResult } from "../types/ops.js";
 import {
+  DOCKER_CLI_UNAVAILABLE_MESSAGE,
   DOCKER_OPS_DISABLED_MESSAGE,
   HOST_DISK_USAGE_DISABLED_MESSAGE,
 } from "./opsMessages.js";
@@ -22,6 +23,16 @@ function dockerOpsDisabledResult(action: string): OpsResult {
     action,
     summary: "Docker 主機查詢已停用",
     detail: DOCKER_OPS_DISABLED_MESSAGE,
+    exitCode: null,
+  };
+}
+
+function dockerCliUnavailableResult(action: string): OpsResult {
+  return {
+    ok: false,
+    action,
+    summary: "Docker CLI 不可用",
+    detail: DOCKER_CLI_UNAVAILABLE_MESSAGE,
     exitCode: null,
   };
 }
@@ -142,7 +153,7 @@ async function dockerPs(): Promise<OpsResult> {
     ]);
 
     if (code === -1) {
-      return dockerOpsDisabledResult("docker_ps");
+      return dockerCliUnavailableResult("docker_ps");
     }
 
     if (code !== 0) {
@@ -180,7 +191,7 @@ async function tailLogs(plan: OpsPlan): Promise<OpsResult> {
   ]);
 
   if (exitCode === -1) {
-    return dockerOpsDisabledResult("tail_logs");
+    return dockerCliUnavailableResult("tail_logs");
   }
 
   const detail = (stdout || stderr).slice(-3500);

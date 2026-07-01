@@ -7,3 +7,9 @@ export const DOCKER_OPS_DISABLED_MESSAGE = [
 
 export const HOST_DISK_USAGE_DISABLED_MESSAGE =
   "Host 磁碟查詢目前尚未提供安全的查詢通道。";
+
+export const DOCKER_CLI_UNAVAILABLE_MESSAGE = [
+  "此容器映像未安裝 Docker CLI，無法執行 Docker 查詢。",
+  "",
+  "Production 應保持 OPS_DOCKER_ENABLED=false，並使用 HTTP Health Check。",
+].join("\n");
