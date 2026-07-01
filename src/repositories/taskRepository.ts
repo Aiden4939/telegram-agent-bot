@@ -99,6 +99,7 @@ export function getTaskById(taskId: string): TaskRecord | null {
         repository,
         base_branch AS baseBranch,
         working_branch AS workingBranch,
+        pull_request_number AS pullRequestNumber,
         pull_request_url AS pullRequestUrl,
         agent_id AS agentId,
         status,
@@ -109,7 +110,16 @@ export function getTaskById(taskId: string): TaskRecord | null {
         remaining_items_json AS remainingItemsJson,
         pending_question AS pendingQuestion,
         last_commit_sha AS lastCommitSha,
+        ci_run_id AS ciRunId,
+        ci_run_url AS ciRunUrl,
         ci_status AS ciStatus,
+        ci_conclusion AS ciConclusion,
+        ci_head_sha AS ciHeadSha,
+        ci_started_at AS ciStartedAt,
+        ci_completed_at AS ciCompletedAt,
+        ci_failed_job AS ciFailedJob,
+        ci_failed_step AS ciFailedStep,
+        retry_count AS retryCount,
         estimated_cost AS estimatedCost,
         actual_cost AS actualCost,
         model_call_count AS modelCallCount,
@@ -143,6 +153,7 @@ export function getLatestRecoverableTasksByChat(chatId: string): TaskRecord[] {
         repository,
         base_branch AS baseBranch,
         working_branch AS workingBranch,
+        pull_request_number AS pullRequestNumber,
         pull_request_url AS pullRequestUrl,
         agent_id AS agentId,
         status,
@@ -153,7 +164,16 @@ export function getLatestRecoverableTasksByChat(chatId: string): TaskRecord[] {
         remaining_items_json AS remainingItemsJson,
         pending_question AS pendingQuestion,
         last_commit_sha AS lastCommitSha,
+        ci_run_id AS ciRunId,
+        ci_run_url AS ciRunUrl,
         ci_status AS ciStatus,
+        ci_conclusion AS ciConclusion,
+        ci_head_sha AS ciHeadSha,
+        ci_started_at AS ciStartedAt,
+        ci_completed_at AS ciCompletedAt,
+        ci_failed_job AS ciFailedJob,
+        ci_failed_step AS ciFailedStep,
+        retry_count AS retryCount,
         estimated_cost AS estimatedCost,
         actual_cost AS actualCost,
         model_call_count AS modelCallCount,
@@ -223,8 +243,18 @@ export function transitionTaskStatus(input: {
   pendingQuestion?: string | null;
   agentId?: string | null;
   pullRequestUrl?: string | null;
+  pullRequestNumber?: number | null;
   lastCommitSha?: string | null;
   ciStatus?: string | null;
+  ciRunId?: string | null;
+  ciRunUrl?: string | null;
+  ciConclusion?: string | null;
+  ciHeadSha?: string | null;
+  ciStartedAt?: string | null;
+  ciCompletedAt?: string | null;
+  ciFailedJob?: string | null;
+  ciFailedStep?: string | null;
+  retryCountDelta?: number;
   errorCode?: string | null;
   errorSummary?: string | null;
   estimatedCostDelta?: number;
@@ -250,9 +280,19 @@ export function transitionTaskStatus(input: {
            remaining_items_json = COALESCE(@remainingItemsJson, remaining_items_json),
            pending_question = COALESCE(@pendingQuestion, pending_question),
            agent_id = COALESCE(@agentId, agent_id),
+           pull_request_number = COALESCE(@pullRequestNumber, pull_request_number),
            pull_request_url = COALESCE(@pullRequestUrl, pull_request_url),
            last_commit_sha = COALESCE(@lastCommitSha, last_commit_sha),
+           ci_run_id = COALESCE(@ciRunId, ci_run_id),
+           ci_run_url = COALESCE(@ciRunUrl, ci_run_url),
            ci_status = COALESCE(@ciStatus, ci_status),
+           ci_conclusion = COALESCE(@ciConclusion, ci_conclusion),
+           ci_head_sha = COALESCE(@ciHeadSha, ci_head_sha),
+           ci_started_at = COALESCE(@ciStartedAt, ci_started_at),
+           ci_completed_at = COALESCE(@ciCompletedAt, ci_completed_at),
+           ci_failed_job = COALESCE(@ciFailedJob, ci_failed_job),
+           ci_failed_step = COALESCE(@ciFailedStep, ci_failed_step),
+           retry_count = retry_count + @retryCountDelta,
            error_code = COALESCE(@errorCode, error_code),
            error_summary = COALESCE(@errorSummary, error_summary),
            estimated_cost = estimated_cost + @estimatedCostDelta,
@@ -274,8 +314,18 @@ export function transitionTaskStatus(input: {
       pendingQuestion: input.pendingQuestion ?? null,
       agentId: input.agentId ?? null,
       pullRequestUrl: input.pullRequestUrl ?? null,
+      pullRequestNumber: input.pullRequestNumber ?? null,
       lastCommitSha: input.lastCommitSha ?? null,
+      ciRunId: input.ciRunId ?? null,
+      ciRunUrl: input.ciRunUrl ?? null,
       ciStatus: input.ciStatus ?? null,
+      ciConclusion: input.ciConclusion ?? null,
+      ciHeadSha: input.ciHeadSha ?? null,
+      ciStartedAt: input.ciStartedAt ?? null,
+      ciCompletedAt: input.ciCompletedAt ?? null,
+      ciFailedJob: input.ciFailedJob ?? null,
+      ciFailedStep: input.ciFailedStep ?? null,
+      retryCountDelta: input.retryCountDelta ?? 0,
       errorCode: input.errorCode ?? null,
       errorSummary: input.errorSummary ?? null,
       estimatedCostDelta: input.estimatedCostDelta ?? 0,
@@ -349,6 +399,7 @@ export function findStaleRunningTasks(heartbeatExpiryMs: number): TaskRecord[] {
         repository,
         base_branch AS baseBranch,
         working_branch AS workingBranch,
+        pull_request_number AS pullRequestNumber,
         pull_request_url AS pullRequestUrl,
         agent_id AS agentId,
         status,
@@ -359,7 +410,16 @@ export function findStaleRunningTasks(heartbeatExpiryMs: number): TaskRecord[] {
         remaining_items_json AS remainingItemsJson,
         pending_question AS pendingQuestion,
         last_commit_sha AS lastCommitSha,
+        ci_run_id AS ciRunId,
+        ci_run_url AS ciRunUrl,
         ci_status AS ciStatus,
+        ci_conclusion AS ciConclusion,
+        ci_head_sha AS ciHeadSha,
+        ci_started_at AS ciStartedAt,
+        ci_completed_at AS ciCompletedAt,
+        ci_failed_job AS ciFailedJob,
+        ci_failed_step AS ciFailedStep,
+        retry_count AS retryCount,
         estimated_cost AS estimatedCost,
         actual_cost AS actualCost,
         model_call_count AS modelCallCount,
@@ -422,6 +482,7 @@ export function getLatestTaskByChat(chatId: string): TaskRecord | null {
         repository,
         base_branch AS baseBranch,
         working_branch AS workingBranch,
+        pull_request_number AS pullRequestNumber,
         pull_request_url AS pullRequestUrl,
         agent_id AS agentId,
         status,
@@ -432,7 +493,16 @@ export function getLatestTaskByChat(chatId: string): TaskRecord | null {
         remaining_items_json AS remainingItemsJson,
         pending_question AS pendingQuestion,
         last_commit_sha AS lastCommitSha,
+        ci_run_id AS ciRunId,
+        ci_run_url AS ciRunUrl,
         ci_status AS ciStatus,
+        ci_conclusion AS ciConclusion,
+        ci_head_sha AS ciHeadSha,
+        ci_started_at AS ciStartedAt,
+        ci_completed_at AS ciCompletedAt,
+        ci_failed_job AS ciFailedJob,
+        ci_failed_step AS ciFailedStep,
+        retry_count AS retryCount,
         estimated_cost AS estimatedCost,
         actual_cost AS actualCost,
         model_call_count AS modelCallCount,
@@ -452,4 +522,63 @@ export function getLatestTaskByChat(chatId: string): TaskRecord | null {
     )
     .get(chatId) as TaskRecord | undefined;
   return row ? mapTaskRow(row) : null;
+}
+
+export function listTasksByStatuses(statuses: TaskStatus[]): TaskRecord[] {
+  const db = getDb();
+  if (statuses.length === 0) {
+    return [];
+  }
+  const placeholders = statuses.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT
+        task_id AS taskId,
+        task_type AS taskType,
+        requested_by AS requestedBy,
+        chat_id AS chatId,
+        source_update_id AS sourceUpdateId,
+        source_message_id AS sourceMessageId,
+        repository,
+        base_branch AS baseBranch,
+        working_branch AS workingBranch,
+        pull_request_number AS pullRequestNumber,
+        pull_request_url AS pullRequestUrl,
+        agent_id AS agentId,
+        status,
+        approval_status AS approvalStatus,
+        original_request AS originalRequest,
+        progress_summary AS progressSummary,
+        completed_items_json AS completedItemsJson,
+        remaining_items_json AS remainingItemsJson,
+        pending_question AS pendingQuestion,
+        last_commit_sha AS lastCommitSha,
+        ci_run_id AS ciRunId,
+        ci_run_url AS ciRunUrl,
+        ci_status AS ciStatus,
+        ci_conclusion AS ciConclusion,
+        ci_head_sha AS ciHeadSha,
+        ci_started_at AS ciStartedAt,
+        ci_completed_at AS ciCompletedAt,
+        ci_failed_job AS ciFailedJob,
+        ci_failed_step AS ciFailedStep,
+        retry_count AS retryCount,
+        estimated_cost AS estimatedCost,
+        actual_cost AS actualCost,
+        model_call_count AS modelCallCount,
+        tool_call_count AS toolCallCount,
+        created_at AS createdAt,
+        updated_at AS updatedAt,
+        started_at AS startedAt,
+        completed_at AS completedAt,
+        expires_at AS expiresAt,
+        last_heartbeat_at AS lastHeartbeatAt,
+        error_code AS errorCode,
+        error_summary AS errorSummary
+       FROM tasks
+       WHERE status IN (${placeholders})
+       ORDER BY updated_at DESC`
+    )
+    .all(...statuses) as TaskRecord[];
+  return rows.map(mapTaskRow);
 }

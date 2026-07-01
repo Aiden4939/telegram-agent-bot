@@ -28,6 +28,16 @@
 
 - [ ] GitHub read query works.
 - [ ] `/dev` generates plan and waits for approval.
-- [ ] approval callback runs task.
+- [ ] plan approval callback runs task.
+- [ ] task reaches `CHECKPOINTED`.
+- [ ] draft PR is auto-created/reused.
+- [ ] CI run is discovered and task enters `CI_RUNNING`.
+- [ ] CI success leads to `READY_FOR_REVIEW`.
+- [ ] CI failure leads to retry decision prompt.
+- [ ] retry approval can trigger resume/reconstruction run.
 - [ ] `/pause` and `/cancel` change task state.
 - [ ] `繼續` can find recoverable task.
+- [ ] process restart recovers pending CI tracking.
+- [ ] event/log output is redacted.
+- [ ] bot cannot merge PR.
+- [ ] bot cannot deploy production.

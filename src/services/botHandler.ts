@@ -44,10 +44,13 @@ import { executeGitHubPlan, formatGitHubResult } from "./githubExecutor.js";
 import {
   approveAndRunDevTask,
   cancelTask,
+  createRetryCiApproval,
   createDevTask,
+  getCiFailureSummary,
   getRecoverableTaskChoices,
   pauseTask,
   rejectDevTask,
+  validateCiDecisionToken,
 } from "./devTaskWorkflow.js";
 import { getCurrentCwd, resolveAllowedCwd } from "../utils/cwd.js";
 import {
@@ -376,6 +379,13 @@ export function createBot(): Bot {
         `Task 狀態：${latestTask?.status || "（無）"}`,
         `Task repo：${latestTask?.repository || "（無）"}`,
         `Task PR：${latestTask?.pullRequestUrl || "（無）"}`,
+        `Task PR(draft)：${latestTask?.status === "DRAFT_PR_OPEN" ? "是" : "否"}`,
+        `CI Run：${latestTask?.ciRunUrl || "（無）"}`,
+        `CI Status：${latestTask?.ciStatus || "（無）"}`,
+        `CI Conclusion：${latestTask?.ciConclusion || "（無）"}`,
+        `CI Failed Job：${latestTask?.ciFailedJob || "（無）"}`,
+        `CI Failed Step：${latestTask?.ciFailedStep || "（無）"}`,
+        `最後更新：${latestTask?.updatedAt || "（無）"}`,
         `Task 成本(估)：${latestTask?.estimatedCost ?? 0}`,
         `Cursor SDK：${env.cursorApiKey ? "已設定" : "未設定"}`,
         `簡短 dev 回覆：${env.devBriefReply ? "開啟" : "關閉"}`,
@@ -565,6 +575,20 @@ export function createBot(): Bot {
         );
         return;
       }
+      if (candidates[0].status === "CI_FAILED") {
+        const token = createRetryCiApproval(candidates[0]);
+        if (token) {
+          const kb = new InlineKeyboard()
+            .text("修正", `retry:${candidates[0].taskId}:${token}`)
+            .text("暫停", `pausecb:${candidates[0].taskId}:${token}`)
+            .text("取消", `cancelcb:${candidates[0].taskId}:${token}`);
+          await ctx.reply(
+            `CI 失敗\n\n${getCiFailureSummary(candidates[0].taskId)}\n\n是否讓 Agent 根據 CI 結果進行一次修正？`,
+            { reply_markup: kb }
+          );
+          return;
+        }
+      }
       await ctx.reply(
         `已找到可恢復 Task ${candidates[0].taskId}（${candidates[0].status}），請用 /dev 補充下一步需求。`
       );
@@ -620,18 +644,25 @@ export function createBot(): Bot {
             taskId,
             approvalToken: token,
             userId: fromId,
+            action: "approve_plan",
           });
-          await ctx.api.editMessageText(
-            ctx.chat!.id,
-            status.message_id,
-            [
-              `Task ${result.taskId} 進度更新：${result.status}`,
-              `Repo：${result.repository ?? "（未指定）"}`,
-              `Branch：${result.workingBranch ?? "（未指定）"}`,
-              `PR：${result.pullRequestUrl ?? "（尚未建立）"}`,
-              `成本估算：${result.estimatedCost}`,
-            ].join("\n")
-          );
+          const lines =
+            result.status === "DRAFT_PR_OPEN"
+              ? [
+                  "Draft PR 已建立",
+                  `Repository: ${result.repository ?? "（未指定）"}`,
+                  `Branch: ${result.workingBranch ?? "（未指定）"}`,
+                  `PR: ${result.pullRequestUrl ?? "（尚未建立）"}`,
+                  "狀態：等待 CI",
+                ]
+              : [
+                  `Task ${result.taskId} 進度更新：${result.status}`,
+                  `Repo：${result.repository ?? "（未指定）"}`,
+                  `Branch：${result.workingBranch ?? "（未指定）"}`,
+                  `PR：${result.pullRequestUrl ?? "（尚未建立）"}`,
+                  `成本估算：${result.estimatedCost}`,
+                ];
+          await ctx.api.editMessageText(ctx.chat!.id, status.message_id, lines.join("\n"));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           await ctx.api.editMessageText(
@@ -645,6 +676,44 @@ export function createBot(): Bot {
         await ctx.answerCallbackQuery({ text: "已取消。" });
         await ctx.editMessageReplyMarkup({ reply_markup: undefined });
         await ctx.reply(`Task ${taskId} 已取消。`);
+      } else if (action === "retry") {
+        await ctx.answerCallbackQuery({ text: "已確認，開始依 CI 修正。" });
+        await ctx.editMessageReplyMarkup({ reply_markup: undefined });
+        const status = await ctx.reply(`Task ${taskId} 重新執行中…`);
+        try {
+          const result = await approveAndRunDevTask({
+            taskId,
+            approvalToken: token,
+            userId: fromId,
+            action: "ci_failed_decision",
+          });
+          await ctx.api.editMessageText(
+            ctx.chat!.id,
+            status.message_id,
+            `Task ${result.taskId} 已重新執行，狀態：${result.status}\nPR: ${
+              result.pullRequestUrl ?? "（無）"
+            }`
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await ctx.api.editMessageText(
+            ctx.chat!.id,
+            status.message_id,
+            `Task ${taskId} 重試失敗：${redactSecrets(message)}`
+          );
+        }
+      } else if (action === "pausecb") {
+        validateCiDecisionToken({ taskId, token, userId: fromId });
+        const paused = pauseTask(taskId, fromId);
+        await ctx.answerCallbackQuery({ text: "已暫停。" });
+        await ctx.editMessageReplyMarkup({ reply_markup: undefined });
+        await ctx.reply(`Task ${paused.taskId} 已暫停。`);
+      } else if (action === "cancelcb") {
+        validateCiDecisionToken({ taskId, token, userId: fromId });
+        const cancelledTask = cancelTask(taskId, fromId);
+        await ctx.answerCallbackQuery({ text: "已取消。" });
+        await ctx.editMessageReplyMarkup({ reply_markup: undefined });
+        await ctx.reply(`Task ${cancelledTask.taskId} 已取消。`);
       } else {
         await ctx.answerCallbackQuery({ text: "未知操作", show_alert: true });
       }

@@ -1,9 +1,27 @@
 import { getDb } from "./database.js";
 
+function hasColumn(table: string, column: string): boolean {
+  const db = getDb();
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  return rows.some((row) => row.name === column);
+}
+
+function ensureColumn(table: string, column: string, typeDef: string): void {
+  const db = getDb();
+  if (!hasColumn(table, column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${typeDef}`);
+  }
+}
+
 export function ensureSchema(): void {
   const db = getDb();
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY,
+      applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS notes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       chat_id TEXT NOT NULL,
@@ -65,7 +83,15 @@ export function ensureSchema(): void {
       pending_question TEXT,
       last_commit_sha TEXT,
       ci_run_id TEXT,
+      ci_run_url TEXT,
       ci_status TEXT,
+      ci_conclusion TEXT,
+      ci_head_sha TEXT,
+      ci_started_at TEXT,
+      ci_completed_at TEXT,
+      ci_failed_job TEXT,
+      ci_failed_step TEXT,
+      retry_count INTEGER NOT NULL DEFAULT 0,
       test_result_json TEXT NOT NULL DEFAULT '{}',
       estimated_cost REAL NOT NULL DEFAULT 0,
       actual_cost REAL NOT NULL DEFAULT 0,
@@ -107,5 +133,50 @@ export function ensureSchema(): void {
       FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_approval_tokens_task_id ON approval_tokens(task_id);
+
+    CREATE TABLE IF NOT EXISTS task_ci_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id TEXT NOT NULL,
+      repository TEXT NOT NULL,
+      workflow_run_id TEXT NOT NULL,
+      workflow_name TEXT,
+      head_sha TEXT,
+      status TEXT NOT NULL,
+      conclusion TEXT,
+      html_url TEXT,
+      started_at TEXT,
+      completed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(repository, workflow_run_id),
+      FOREIGN KEY(task_id) REFERENCES tasks(task_id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_ci_runs_task_id ON task_ci_runs(task_id, updated_at);
+
+    CREATE TABLE IF NOT EXISTS task_ci_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_ci_run_id INTEGER NOT NULL,
+      job_id TEXT NOT NULL,
+      job_name TEXT NOT NULL,
+      status TEXT,
+      conclusion TEXT,
+      html_url TEXT,
+      failed_step TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(task_ci_run_id, job_id),
+      FOREIGN KEY(task_ci_run_id) REFERENCES task_ci_runs(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_task_ci_jobs_run_id ON task_ci_jobs(task_ci_run_id);
   `);
+
+  // Stage B -> Stage D/E migration compatibility
+  ensureColumn("tasks", "ci_run_url", "TEXT");
+  ensureColumn("tasks", "ci_conclusion", "TEXT");
+  ensureColumn("tasks", "ci_head_sha", "TEXT");
+  ensureColumn("tasks", "ci_started_at", "TEXT");
+  ensureColumn("tasks", "ci_completed_at", "TEXT");
+  ensureColumn("tasks", "ci_failed_job", "TEXT");
+  ensureColumn("tasks", "ci_failed_step", "TEXT");
+  ensureColumn("tasks", "retry_count", "INTEGER NOT NULL DEFAULT 0");
 }

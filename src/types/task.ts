@@ -36,9 +36,12 @@ export const TASK_EVENT_TYPES = [
   "QUESTION_REQUESTED",
   "USER_RESPONSE_RECEIVED",
   "DRAFT_PR_CREATED",
+  "DRAFT_PR_REUSED",
+  "CI_RUN_DISCOVERED",
   "CI_STARTED",
   "CI_SUCCEEDED",
   "CI_FAILED",
+  "TASK_READY_FOR_REVIEW",
   "TASK_PAUSED",
   "TASK_FAILED",
   "TASK_CANCELLED",
@@ -60,6 +63,7 @@ export interface TaskRecord {
   baseBranch: string | null;
   workingBranch: string | null;
   pullRequestUrl: string | null;
+  pullRequestNumber?: number | null;
   agentId: string | null;
   status: TaskStatus;
   approvalStatus: ApprovalStatus;
@@ -70,6 +74,15 @@ export interface TaskRecord {
   pendingQuestion: string | null;
   lastCommitSha: string | null;
   ciStatus: string | null;
+  ciRunId?: string | null;
+  ciRunUrl?: string | null;
+  ciConclusion?: string | null;
+  ciHeadSha?: string | null;
+  ciStartedAt?: string | null;
+  ciCompletedAt?: string | null;
+  ciFailedJob?: string | null;
+  ciFailedStep?: string | null;
+  retryCount?: number;
   estimatedCost: number;
   actualCost: number;
   modelCallCount: number;

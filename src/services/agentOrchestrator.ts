@@ -84,7 +84,7 @@ function agentBaseOptions(cwd: string) {
   };
 }
 
-async function openAgent(chatId: string, sdk: CursorSdk) {
+async function openAgent(chatId: string, sdk: CursorSdk, preferredAgentId?: string) {
   assertCursorConfigured();
 
   const session = getSession(chatId);
@@ -95,11 +95,20 @@ async function openAgent(chatId: string, sdk: CursorSdk) {
       ? `cloud:${env.cloudRepos.join(",")}`
       : cwd;
 
-  if (session?.agentId) {
+  const resumableId = preferredAgentId ?? session?.agentId ?? null;
+  let resumeFailed = false;
+  if (resumableId) {
     try {
-      const agent = await sdk.Agent.resume(session.agentId, options);
-      return { agent, cwd: workspaceLabel };
+      const agent = await sdk.Agent.resume(resumableId, options);
+      return {
+        agent,
+        cwd: workspaceLabel,
+        resumed: true,
+        resumedFrom: resumableId,
+        resumeFailed: false,
+      };
     } catch (error) {
+      resumeFailed = true;
       console.warn(
         `[agent] Resume failed for chat ${chatId}, creating new agent:`,
         error
@@ -109,7 +118,13 @@ async function openAgent(chatId: string, sdk: CursorSdk) {
 
   const agent = await sdk.Agent.create(options);
 
-  return { agent, cwd: workspaceLabel };
+  return {
+    agent,
+    cwd: workspaceLabel,
+    resumed: false,
+    resumedFrom: resumableId,
+    resumeFailed,
+  };
 }
 
 const DEV_TELEGRAM_HINT = `
@@ -129,14 +144,19 @@ function buildDevPrompt(prompt: string): string {
 
 export async function sendDevPrompt(
   chatId: string,
-  prompt: string
-): Promise<{ text: string; agentId: string }> {
+  prompt: string,
+  options?: { preferredAgentId?: string }
+): Promise<{ text: string; agentId: string; resumed: boolean; resumeFailed: boolean }> {
   assertCursorConfigured();
 
   const sdk = await loadCursorSdk();
   const fullPrompt = buildDevPrompt(prompt);
 
-  const { agent, cwd } = await openAgent(chatId, sdk);
+  const { agent, cwd, resumed, resumeFailed } = await openAgent(
+    chatId,
+    sdk,
+    options?.preferredAgentId
+  );
 
   upsertSession({
     chatId,
@@ -171,6 +191,8 @@ export async function sendDevPrompt(
     return {
       text: text.trim() || "（Agent 已完成，但沒有文字回覆）",
       agentId: agent.agentId,
+      resumed,
+      resumeFailed,
     };
   } catch (error) {
     upsertSession({

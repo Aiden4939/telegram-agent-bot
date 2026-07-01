@@ -164,4 +164,17 @@ export const env = {
     60000,
     3_600_000
   ),
+  taskCiPollIntervalSeconds: parsePositiveInt(
+    process.env.TASK_CI_POLL_INTERVAL_SECONDS,
+    20,
+    600
+  ),
+  taskCiTimeoutSeconds: parsePositiveInt(
+    process.env.TASK_CI_TIMEOUT_SECONDS,
+    1800,
+    86_400
+  ),
+  taskCiMaxPolls: parsePositiveInt(process.env.TASK_CI_MAX_POLLS, 120, 5000),
+  taskMaxAgentResumes: parsePositiveInt(process.env.TASK_MAX_AGENT_RESUMES, 3, 20),
+  taskMaxCiFixAttempts: parsePositiveInt(process.env.TASK_MAX_CI_FIX_ATTEMPTS, 3, 20),
 };

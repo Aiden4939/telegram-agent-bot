@@ -6,6 +6,7 @@ import { closeDb } from "./db/database.js";
 import { recoverStaleSessions } from "./repositories/sessionRepository.js";
 import { createBot, startBot } from "./services/botHandler.js";
 import { recoverStaleTasks } from "./services/taskRecovery.js";
+import { recoverPendingCiTracking } from "./services/ciTracker.js";
 
 async function main(): Promise<void> {
   assertProductionRuntimeGuards();
@@ -19,6 +20,7 @@ async function main(): Promise<void> {
   if (recoveredTasks > 0) {
     console.warn(`[task] Recovered ${recoveredTasks} stale running task(s)`);
   }
+  await recoverPendingCiTracking();
 
   const app = createApp();
   const bot = createBot();
