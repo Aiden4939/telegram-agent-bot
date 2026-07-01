@@ -77,24 +77,22 @@ node ./node_modules/tsx/dist/cli.mjs watch src/index.ts
 幫我看現在 docker 服務是否健康
 ```
 
-## Ops 主機操作（Phase 1）
+## Ops 主機操作
 
 自然語言觸發 `ops` 意圖後，會先由 `opsPlanner` 規劃，再由 `opsExecutor` 執行白名單查詢：
 
-| Action | 範例 |
-|--------|------|
-| `check_health` | 幫我看服務健康狀態 |
-| `docker_ps` | 幫我看 docker 容器狀態 |
-| `tail_logs` | 幫我看 telegram-agent-bot 最近 log |
-| `disk_usage` | 幫我看磁碟使用 |
+| Action | 範例 | 預設狀態 |
+|--------|------|---------|
+| `check_health` | 幫我看服務健康狀態 | ✅ 啟用 |
+| `docker_ps` | 幫我看 docker 容器狀態 | ⛔ 預設停用（安全考量） |
+| `tail_logs` | 幫我看某容器最近 log | ⛔ 預設停用（安全考量） |
+| `disk_usage` | 幫我看主機磁碟 | ⛔ 已停用（無安全 Host 查詢通道） |
 
-遠端部署若要啟用 `docker_ps` / `tail_logs`，需在 infra 設定：
+**Production 安全原則：** Telegram Bot 容器**不應**掛載 `/var/run/docker.sock`。`:ro` 掛載無法限制 Docker Engine API，等同 Host 高權限。
 
-- `OPS_DOCKER_ENABLED=true`
-- 掛載 `/var/run/docker.sock`
-- `OPS_ALLOWED_CONTAINERS` 填實際 `container_name`（遠端 infra 通常為 `svc-telegram-bot` 等）
+Docker 容器狀態／日誌查詢若需恢復，應透過未來的 **Ops Gateway**（獨立服務），而非 Bot 直連 socket。
 
-本機 `docker-compose.yml` 預設容器名為 `telegram-agent-bot`、`playwright-service`。
+`OPS_HEALTH_URLS` 可設定 compose 內網可達的 HTTP health endpoint（見 infra 文件）。
 
 ## Docker 一鍵啟動
 
@@ -153,7 +151,7 @@ PORT=3001
 | `INTENT_ROUTER` | `llm` 或 `rules` |
 | `SCRAPE_MODE` | `inline` 或 `n8n` |
 | `OPS_ENABLED` | 是否啟用 ops 執行器（預設 true） |
-| `OPS_DOCKER_ENABLED` | 是否允許 docker 查詢（需 socket + docker-cli） |
+| `OPS_DOCKER_ENABLED` | 是否允許 docker 查詢（預設 false；Production 應保持 false） |
 | `OPS_ALLOWED_CONTAINERS` | 允許查狀態/log 的容器白名單 |
 | `OPS_HEALTH_URLS` | 健康檢查 URL（未設則用 bot + playwright） |
 

@@ -2,16 +2,29 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { env } from "../config/env.js";
 import type { OpsPlan, OpsResult } from "../types/ops.js";
+import {
+  DOCKER_OPS_DISABLED_MESSAGE,
+  HOST_DISK_USAGE_DISABLED_MESSAGE,
+} from "./opsMessages.js";
 
 const execFileAsync = promisify(execFile);
 
 const OPS_HELP = [
   "目前支援的 ops 查詢：",
   "• 檢查服務健康（check_health）",
-  "• 查看容器狀態（docker_ps）",
-  "• 查看容器日誌（tail_logs，需指定容器）",
-  "• 查看磁碟使用（disk_usage）",
+  "• 查看容器狀態（docker_ps，需啟用 Docker ops）",
+  "• 查看容器日誌（tail_logs，需啟用 Docker ops）",
 ].join("\n");
+
+function dockerOpsDisabledResult(action: string): OpsResult {
+  return {
+    ok: false,
+    action,
+    summary: "Docker 主機查詢已停用",
+    detail: DOCKER_OPS_DISABLED_MESSAGE,
+    exitCode: null,
+  };
+}
 
 function assertDockerAllowlist(action: string): void {
   if (env.opsAllowedContainers.length === 0) {
@@ -63,7 +76,7 @@ async function runCommand(
     };
 
     if (execError.code === "ENOENT") {
-      throw new Error(`${file} 不可用，請確認容器已安裝或已掛載 docker socket。`);
+      return { stdout: "", stderr: "", exitCode: -1 };
     }
 
     return {
@@ -110,9 +123,7 @@ async function checkHealth(): Promise<OpsResult> {
 
 async function dockerPs(): Promise<OpsResult> {
   if (!env.opsDockerEnabled) {
-    throw new Error(
-      "Docker ops 未啟用。請在 infra 設定 OPS_DOCKER_ENABLED=true 並掛載 docker socket。"
-    );
+    return dockerOpsDisabledResult("docker_ps");
   }
 
   assertDockerAllowlist("docker_ps");
@@ -129,6 +140,10 @@ async function dockerPs(): Promise<OpsResult> {
       "--format",
       "{{.Names}}\t{{.Status}}\t{{.Ports}}",
     ]);
+
+    if (code === -1) {
+      return dockerOpsDisabledResult("docker_ps");
+    }
 
     if (code !== 0) {
       exitCode = code;
@@ -153,9 +168,7 @@ async function dockerPs(): Promise<OpsResult> {
 
 async function tailLogs(plan: OpsPlan): Promise<OpsResult> {
   if (!env.opsDockerEnabled) {
-    throw new Error(
-      "Docker ops 未啟用。請在 infra 設定 OPS_DOCKER_ENABLED=true 並掛載 docker socket。"
-    );
+    return dockerOpsDisabledResult("tail_logs");
   }
 
   const container = resolveContainer(plan);
@@ -165,6 +178,10 @@ async function tailLogs(plan: OpsPlan): Promise<OpsResult> {
     String(env.opsLogTailLines),
     container,
   ]);
+
+  if (exitCode === -1) {
+    return dockerOpsDisabledResult("tail_logs");
+  }
 
   const detail = (stdout || stderr).slice(-3500);
 
@@ -178,15 +195,12 @@ async function tailLogs(plan: OpsPlan): Promise<OpsResult> {
 }
 
 async function diskUsage(): Promise<OpsResult> {
-  const { stdout, stderr, exitCode } = await runCommand("df", ["-h"]);
-  const detail = (stdout || stderr).slice(0, 3500);
-
   return {
-    ok: exitCode === 0,
+    ok: false,
     action: "disk_usage",
-    summary: exitCode === 0 ? "已取得磁碟使用資訊" : "取得磁碟使用失敗",
-    detail: detail || "（無輸出）",
-    exitCode,
+    summary: "Host 磁碟查詢未提供",
+    detail: HOST_DISK_USAGE_DISABLED_MESSAGE,
+    exitCode: null,
   };
 }
 
